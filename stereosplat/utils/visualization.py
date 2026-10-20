@@ -79,7 +79,7 @@ def add_header(
 
     try:
         font = ImageFont.truetype("arial.ttf", 16)
-    except IOError:
+    except OSError:
         font = ImageFont.load_default()
 
     for i, name in enumerate(col_names):

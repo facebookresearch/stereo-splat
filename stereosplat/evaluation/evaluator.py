@@ -11,7 +11,6 @@ import torch.nn as nn
 from pytorch_msssim import ms_ssim
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-
 _DEFAULT_DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -22,11 +21,18 @@ class RenderingEvaluator(nn.Module):
         self.psnr_data_range = 1.0
         self.msssim_win_size = 11
         self.msssim_data_range = 1.0
-        self.lpips = LearnedPerceptualImagePatchSimilarity(
-            net_type="alex", normalize=True
-        ).to(self.device)
+        self._lpips: LearnedPerceptualImagePatchSimilarity | None = None
 
-    def __call__(self, pred: dict, target: dict) -> dict:  # pyre-ignore[29]
+    @property
+    def lpips(self) -> LearnedPerceptualImagePatchSimilarity:
+        """LPIPS (AlexNet) metric, built on first use (downloads weights once)."""
+        if self._lpips is None:
+            self._lpips = LearnedPerceptualImagePatchSimilarity(
+                net_type="alex", normalize=True
+            ).to(self.device)
+        return self._lpips
+
+    def __call__(self, pred: dict, target: dict) -> dict:
         return self.forward(pred, target)
 
     def compute_psnr(

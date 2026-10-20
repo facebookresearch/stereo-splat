@@ -212,7 +212,9 @@ class StereoSplat(nn.Module):
             min_disps[:, None].expand(-1, num_pairs).reshape(-1, 1, 1, 1)
         )  # [B*P, 1, 1, 1]
 
-        left_imgs = images[:, :num_pairs].reshape(-1, *images.shape[2:])  # [B*P, C, H, W]
+        left_imgs = images[:, :num_pairs].reshape(
+            -1, *images.shape[2:]
+        )  # [B*P, C, H, W]
         right_imgs = images[:, num_pairs:].reshape(-1, *images.shape[2:])
         left_flipped = torch.flip(left_imgs, dims=[3])
         right_flipped = torch.flip(right_imgs, dims=[3])

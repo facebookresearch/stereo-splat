@@ -19,12 +19,13 @@ from __future__ import annotations
 
 import math
 from math import isqrt
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 from einops import rearrange, repeat
 from gsplat import rasterization
 from tqdm import tqdm
+
 from stereosplat.rendering.gaussians import Gaussians
 from stereosplat.utils.geometry import (
     affine_inverse,
@@ -38,7 +39,7 @@ def render_3dgs(
     intrinsics: torch.Tensor,  # "batch_views 3 3", normalized
     image_shape: tuple[int, int],
     gaussian: Gaussians,
-    background_color: Optional[torch.Tensor] = None,  # "batch_views 3"
+    background_color: torch.Tensor | None = None,  # "batch_views 3"
     use_sh: bool = True,
     num_view: int = 1,
     color_mode: Literal["RGB+D", "RGB+ED"] = "RGB+D",
@@ -60,7 +61,7 @@ def render_3dgs(
             gaussian_sh_coefficients
         )
 
-    degree: Optional[int] = None
+    degree: int | None = None
     if use_sh:
         _, _, _, n = gaussian_sh_coefficients.shape
         degree = isqrt(n) - 1
@@ -158,9 +159,9 @@ def run_renderer_in_chunk_w_trj_mode(
     extrinsics: torch.Tensor,  # world2cam, "batch view 4 4" | "batch view 3 4"
     intrinsics: torch.Tensor,  # unnormed intrinsics, "batch view 3 3"
     image_shape: tuple[int, int],
-    chunk_size: Optional[int] = 8,
-    input_shape: Optional[tuple[int, int]] = None,
-    enable_tqdm: Optional[bool] = False,
+    chunk_size: int | None = 8,
+    input_shape: tuple[int, int] | None = None,
+    enable_tqdm: bool | None = False,
 ) -> dict[str, torch.Tensor]:
     cam2world = affine_inverse(as_homogeneous(extrinsics))
     if input_shape is not None:
@@ -177,7 +178,6 @@ def run_renderer_in_chunk_w_trj_mode(
     tgt_extr = affine_inverse(tgt_c2w)
     if chunk_size is None:
         chunk_size = v
-    # pyrefly: ignore [bad-specialization]
     chunk_size = min(v, chunk_size)
     all_colors = []
     all_depths = []
@@ -188,9 +188,7 @@ def run_renderer_in_chunk_w_trj_mode(
         disable=(not enable_tqdm),
         leave=False,
     ):
-        # pyrefly: ignore [unsupported-operation]
         s = int(chunk_idx * chunk_size)
-        # pyrefly: ignore [unsupported-operation]
         e = int((chunk_idx + 1) * chunk_size)
         cur_n_view = tgt_extr[:, s:e].shape[1]
         color, depth, alpha = render_3dgs(

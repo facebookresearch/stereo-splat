@@ -1,0 +1,79 @@
+# StereoSplat training recipe (paper "v3" recipe).
+#
+# Differences from the paper-final run: the paper model was additionally
+# trained on an internal dataset (XRStereo) that is not public; this recipe
+# uses the public TartanAir (v1) and Infinigen training sets only.
+#
+# Paths are read from the environment:
+#   DATA_ROOT  processed datasets (see scripts/prepare_data)
+#   CKPT_ROOT  FoundationStereo weights (CKPT_ROOT/foundation_stereo/11-33-40/
+#              with cfg.yaml + model_best_bp2.pth)
+seed: 0
+max_depth: 80.0
+num_views: 3
+
+logging:
+  output_dir: outputs/stereosplat
+
+model:
+  name: stereosplat
+  fs_checkpoint_path: ${oc.env:CKPT_ROOT}/foundation_stereo/11-33-40
+  sh_degree: 0
+  gaussian_scale_min: 1.0e-05
+  gaussian_scale_max: 80.0
+  merge_distance: 0.003
+  appearance_resolution: 0.2
+  weight_temperature_init: 1.0
+  cross_view_num_layers: 4
+
+training_datasets:
+  tartan:
+    dataset_path: ${oc.env:DATA_ROOT}/tartanair_processed
+    split_file_path: data/splits/tartan/train.txt
+    img_size: [320, 640]
+    stride: 5
+    num_samples: -1
+  infinigen:
+    dataset_path: ${oc.env:DATA_ROOT}/infinigen_processed
+    split_file_path: data/splits/infinigen_static/train.txt
+    img_size: [320, 640]
+    stride: 1
+    num_samples: -1
+
+test_datasets:
+  infinigen:
+    dataset_path: ${oc.env:DATA_ROOT}/infinigen_processed
+    split_file_path: data/splits/infinigen_static/test.txt
+    img_size: [320, 640]
+    stride: 1
+    num_samples: -1
+  kitti:
+    dataset_path: ${oc.env:DATA_ROOT}/kitti_static
+    split_file_path: data/splits/kitti_static/test.txt
+    img_size: [320, 640]
+    stride: 1
+    num_samples: -1
+  tartanv2:
+    dataset_path: ${oc.env:DATA_ROOT}/tartanair_v2_processed
+    split_file_path: data/splits/tartanv2/test.txt
+    img_size: [320, 640]
+    stride: 1
+    num_samples: -1
+
+loss:
+  name: l1
+  color_l1_weight: 0.8
+  color_ssim_weight: 0.2
+  color_lpips_weight: 0.05
+  depth_weight: 0.5
+
+# The paper model was trained on 80 GPUs (batch size 1 per GPU).
+optimization:
+  batch_size: 1
+  epochs: 10
+  lr: 0.001
+  min_lr: 1.0e-05
+  warmup_epochs: 1
+  validate_every: 1
+  log_every_n_steps: 100
+  grad_clip: 0.0

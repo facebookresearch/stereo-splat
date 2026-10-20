@@ -56,7 +56,9 @@ _FIXED_SETTINGS: dict[str, Any] = {
 def _check_config(model_config: Mapping[str, Any]) -> None:
     name = model_config.get("name", "stereosplat")
     if name not in MODEL_NAMES:
-        raise ValueError(f"Unknown model name {name!r}; expected one of {sorted(MODEL_NAMES)}.")
+        raise ValueError(
+            f"Unknown model name {name!r}; expected one of {sorted(MODEL_NAMES)}."
+        )
     for key, expected in _FIXED_SETTINGS.items():
         if key in model_config and model_config[key] != expected:
             raise ValueError(
@@ -183,4 +185,8 @@ def load_checkpoint(
         f"Loaded checkpoint {checkpoint_path} (epoch {ckpt.get('epoch', '?')}, "
         f"version {ckpt.get('version', '-')})"
     )
-    return {k: v for k, v in ckpt.items() if k not in ("state_dict", "model_state_dict", "optimizer_state_dict")}
+    return {
+        k: v
+        for k, v in ckpt.items()
+        if k not in ("state_dict", "model_state_dict", "optimizer_state_dict")
+    }

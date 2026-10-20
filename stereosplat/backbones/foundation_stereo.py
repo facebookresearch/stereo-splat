@@ -94,7 +94,9 @@ def _ensure_utils_module(max_stubs: int = 32) -> list[str]:
                 sys.modules[e.name] = types.ModuleType(e.name)
                 stubbed.append(e.name)
                 sys.modules.pop("Utils", None)
-        raise ImportError(f"Could not import FoundationStereo Utils (stubbed {stubbed})")
+        raise ImportError(
+            f"Could not import FoundationStereo Utils (stubbed {stubbed})"
+        )
     finally:
         for name in stubbed:
             sys.modules.pop(name, None)
@@ -123,7 +125,9 @@ def import_upstream(
     import core.foundation_stereo as fs_module
     import core.geometry as geometry_module
 
-    if not getattr(geometry_module.bilinear_sampler, "_stereosplat_cudnn_disabled", False):
+    if not getattr(
+        geometry_module.bilinear_sampler, "_stereosplat_cudnn_disabled", False
+    ):
         geometry_module.bilinear_sampler = _cudnn_disabled(
             geometry_module.bilinear_sampler
         )

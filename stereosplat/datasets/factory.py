@@ -14,8 +14,9 @@ Virtual KITTI 2, all read from the processed per-frame layout on local disk.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 from stereosplat.datasets.infinigen import InfinigenDataset
 from stereosplat.datasets.kitti import KITTIDataset
@@ -27,7 +28,7 @@ from stereosplat.datasets.vkitti2 import VKITTI2Dataset
 REPO_ROOT: Path = Path(__file__).resolve().parents[2]
 
 
-def load_split_file(split_file_path: str) -> List[str]:
+def load_split_file(split_file_path: str) -> list[str]:
     """
     Load a split file containing scene names (one per line).
 
@@ -46,7 +47,7 @@ def load_split_file(split_file_path: str) -> List[str]:
         candidates.append(REPO_ROOT / split_file_path)
     for path in candidates:
         if path.is_file():
-            with open(path, "r") as f:
+            with open(path) as f:
                 return sorted([line.strip() for line in f.readlines() if line.strip()])
 
     raise FileNotFoundError(
@@ -56,9 +57,9 @@ def load_split_file(split_file_path: str) -> List[str]:
 
 def get_dataset(
     dataset_name: str,
-    dataset_config: Dict[str, Any],
+    dataset_config: dict[str, Any],
     transforms: Callable,
-    scene_names: List[str] | None = None,
+    scene_names: list[str] | None = None,
 ) -> (
     TartanAirDataset
     | TartanAirV2Dataset

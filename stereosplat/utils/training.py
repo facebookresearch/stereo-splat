@@ -16,7 +16,6 @@ This module provides utility functions for training including:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 from torch import nn
 from torchvision import transforms
@@ -24,11 +23,11 @@ from torchvision import transforms
 # Dataset-specific pixel normalization applied to model input images
 # (see get_transforms). Kept as named constants so backbones that need the raw
 # 0-255 space (e.g. IGEV++) can invert it.
-IMAGE_NORM_MEAN: List[float] = [0.34721234, 0.36705238, 0.36066107]
-IMAGE_NORM_STD: List[float] = [0.30737526, 0.31515116, 0.32020183]
+IMAGE_NORM_MEAN: list[float] = [0.34721234, 0.36705238, 0.36066107]
+IMAGE_NORM_STD: list[float] = [0.30737526, 0.31515116, 0.32020183]
 
 
-def setup_output_paths(output_path: str, folder_names: List[str]) -> None:
+def setup_output_paths(output_path: str, folder_names: list[str]) -> None:
     """
     Create output directories for training artifacts.
 

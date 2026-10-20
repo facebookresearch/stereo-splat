@@ -8,7 +8,8 @@
 
 from __future__ import annotations
 
-from typing import cast, Iterator, Sized
+from collections.abc import Iterator, Sized
+from typing import cast
 
 from torch.utils.data import Dataset, DistributedSampler
 

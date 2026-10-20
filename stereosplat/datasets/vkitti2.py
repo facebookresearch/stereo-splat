@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+
 from stereosplat.datasets.io_utils import (
     adjust_intrinsics_manual,
     create_overlapping_windows,

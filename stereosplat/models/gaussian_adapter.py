@@ -17,11 +17,10 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import torch
 from einops import einsum, rearrange, repeat
 from torch import nn
+
 from stereosplat.rendering.gaussians import Gaussians
 from stereosplat.utils.geometry import (
     affine_inverse,
@@ -64,7 +63,7 @@ class GaussianAdapter(nn.Module):
         intrinsics: torch.Tensor,  # "*#batch 3 3"
         depths: torch.Tensor,  # "*#batch"
         raw_gaussians: torch.Tensor,  # "*#batch _"
-        scores: Optional[torch.Tensor] = None,
+        scores: torch.Tensor | None = None,
         top_k: int = 2048,
     ) -> Gaussians:
         device = extrinsics.device
