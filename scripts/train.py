@@ -33,7 +33,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 
-from stereosplat.datasets.factory import get_dataset
+from stereosplat.datasets.factory import check_dataset_not_empty, get_dataset
 from stereosplat.evaluation.evaluator import RenderingEvaluator
 from stereosplat.losses.factory import get_loss
 from stereosplat.models.build import build_model, load_checkpoint
@@ -115,9 +115,13 @@ def create_dataloaders(
 ) -> tuple[DataLoader, DataLoader, dict[str, DataLoader], DistributedSampler | None]:
     """Train / validation (10% random split of train) / test dataloaders."""
     num_views = config["num_views"]
+    allow_missing = bool(config.get("allow_missing_scenes", False))
     for ds_type in ["training_datasets", "test_datasets"]:
         for ds_name in config.get(ds_type) or {}:
             config[ds_type][ds_name]["num_views"] = num_views
+            config[ds_type][ds_name].setdefault("allow_missing_scenes", allow_missing)
+    if not config.get("training_datasets"):
+        raise ValueError("The config has no training_datasets.")
 
     preprocess = training_utils.get_transforms()
     batch_size = config["optimization"]["batch_size"]
@@ -125,11 +129,17 @@ def create_dataloaders(
     train_datasets = []
     for name, ds_cfg in config["training_datasets"].items():
         log_and_print(f"Loading training dataset: {name}")
-        train_datasets.append(get_dataset(name, ds_cfg, preprocess))
+        ds = get_dataset(name, ds_cfg, preprocess)
+        log_and_print(f"  {check_dataset_not_empty(name, ds, ds_cfg)}")
+        train_datasets.append(ds)
     full_train_data = torch.utils.data.ConcatDataset(train_datasets)
 
     seed = config.get("seed", 42)
     total = len(full_train_data)
+    if total < 2:
+        raise ValueError(
+            f"Need at least 2 training windows for the train/val split, got {total}."
+        )
     val_size = max(1, int(total * 0.1))
     generator = torch.Generator().manual_seed(seed)
     train_data, val_data = torch.utils.data.random_split(
@@ -148,9 +158,15 @@ def create_dataloaders(
     for name, ds_cfg in (config.get("test_datasets") or {}).items():
         log_and_print(f"Loading test dataset: {name}")
         ds = get_dataset(name, ds_cfg, preprocess)
+        log_and_print(f"  {check_dataset_not_empty(name, ds, ds_cfg)}")
         sampler = DistributedSampler(ds, shuffle=False) if distributed else None
         test_loaders[name] = _make_loader(ds, batch_size, sampler, False)
 
+    if len(train_loader) == 0:
+        raise ValueError(
+            f"The training loader is empty: {len(train_data)} training windows, "
+            f"batch_size {batch_size}, world_size {world_size} (drop_last=True)."
+        )
     if rank == 0:
         test_info = ", ".join(f"{k}: {len(v.dataset)}" for k, v in test_loaders.items())
         log_and_print(
@@ -378,6 +394,11 @@ def parse_config() -> dict[str, Any]:
     parser.add_argument("--num-views", type=int, default=None)
     parser.add_argument("--output-dir", type=str, default=None)
     parser.add_argument(
+        "--allow-missing-scenes",
+        action="store_true",
+        help="Skip split scenes that are missing on disk (default: fail)",
+    )
+    parser.add_argument(
         "overrides",
         nargs="*",
         help="OmegaConf dotlist overrides, e.g. optimization.epochs=1",
@@ -395,6 +416,8 @@ def parse_config() -> dict[str, Any]:
         cfg_dict["num_views"] = args.num_views
     if args.output_dir is not None:
         cfg_dict.setdefault("logging", {})["output_dir"] = args.output_dir
+    if args.allow_missing_scenes:
+        cfg_dict["allow_missing_scenes"] = True
     return cfg_dict
 
 

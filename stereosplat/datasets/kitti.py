@@ -44,6 +44,7 @@ from stereosplat.datasets.io_utils import (
     load_rgb_frames_individual,
     process_depth_or_mask,
     process_image,
+    report_missing_scenes,
 )
 
 if TYPE_CHECKING:
@@ -73,6 +74,8 @@ class KITTIDataset(Dataset):
         num_views: Number of views per window
         stride: Stride for frame sampling
         num_samples: Maximum number of samples (0 for all)
+        allow_missing_scenes: Skip split scenes whose poses cannot be loaded
+            (with a warning) instead of raising ``FileNotFoundError``.
     """
 
     def __init__(
@@ -84,6 +87,7 @@ class KITTIDataset(Dataset):
         num_views: int,
         stride: int,
         num_samples: int,
+        allow_missing_scenes: bool = False,
     ) -> None:
         super().__init__()
         self.root = path.rstrip("/")
@@ -95,7 +99,11 @@ class KITTIDataset(Dataset):
 
         self.scene_names = scene_names
         self.samples: list = []
+        self.missing_scenes: list[str] = []
         self._create_samples()
+        report_missing_scenes(
+            type(self).__name__, self.root, self.missing_scenes, allow_missing_scenes
+        )
 
     def _create_samples(self) -> None:
         """Create sample windows from all scenes."""
@@ -106,7 +114,7 @@ class KITTIDataset(Dataset):
             try:
                 num_frames = get_num_frames_from_poses_individual(poses_path)
             except Exception as e:
-                print(f"Warning: Could not load poses for {scene_name}: {e}")
+                self.missing_scenes.append(f"{scene_name}: {poses_path} ({e})")
                 continue
 
             # Create windows with stride

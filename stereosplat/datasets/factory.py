@@ -18,6 +18,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from torch.utils.data import Dataset
+
 from stereosplat.datasets.infinigen import InfinigenDataset
 from stereosplat.datasets.kitti import KITTIDataset
 from stereosplat.datasets.tartan import TartanAirDataset
@@ -80,6 +82,8 @@ def get_dataset(
             - num_views: Number of views per sample
             - stride: Frame sampling stride
             - num_samples: Maximum number of samples (0 for all)
+            - allow_missing_scenes: Skip (warn about) split scenes that are
+              missing on disk instead of raising (default False)
         transforms: Torchvision transforms to apply to images
         scene_names: Optional list of scene names. If not provided,
             reads from split_file_path.
@@ -130,4 +134,32 @@ def get_dataset(
         num_views=dataset_config.get("num_views", 2),
         stride=dataset_config.get("stride", 1),
         num_samples=dataset_config.get("num_samples", 0),
+        allow_missing_scenes=bool(dataset_config.get("allow_missing_scenes", False)),
+    )
+
+
+def check_dataset_not_empty(
+    name: str, dataset: Dataset, dataset_config: dict[str, Any]
+) -> str:
+    """Raise if ``dataset`` has no samples; return a one-line size summary.
+
+    The summary lists the number of scenes that were loaded and the number of
+    windows (samples), e.g. for logging at startup.
+    """
+    scenes = getattr(dataset, "scene_names", None) or []
+    missing = getattr(dataset, "missing_scenes", None) or []
+    if len(dataset) == 0:
+        raise ValueError(
+            f"Dataset '{name}' is empty: 0 windows from {len(scenes)} split "
+            f"scene(s) ({len(missing)} missing) at "
+            f"dataset_path={dataset_config.get('dataset_path')!r}, "
+            f"split_file_path={dataset_config.get('split_file_path')!r}, "
+            f"num_views={dataset_config.get('num_views')}, "
+            f"stride={dataset_config.get('stride', 1)}. Check DATA_ROOT and the "
+            "dataset config."
+        )
+    samples = getattr(dataset, "samples", None) or []
+    num_scenes = len({sample["seq_name"] for sample in samples})
+    return f"{name}: {num_scenes} scenes, {len(dataset)} windows" + (
+        f" ({len(missing)} missing scenes skipped)" if missing else ""
     )

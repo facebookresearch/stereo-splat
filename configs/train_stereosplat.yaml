@@ -12,6 +12,9 @@
 seed: 0
 max_depth: 80.0
 num_views: 3
+# Fail when a scene listed in a split file is missing under DATA_ROOT. Set to
+# true (globally or per dataset) only to run on a deliberately partial copy.
+allow_missing_scenes: false
 
 logging:
   output_dir: outputs/stereosplat

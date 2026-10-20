@@ -42,7 +42,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from stereosplat.datasets.factory import get_dataset
+from stereosplat.datasets.factory import check_dataset_not_empty, get_dataset
 from stereosplat.evaluation.eval_sampler import EvalSampler
 from stereosplat.evaluation.evaluator import RenderingEvaluator
 from stereosplat.evaluation.external_poses import (
@@ -81,8 +81,12 @@ def _reduce_metrics(
     if dist.is_initialized():
         dist.all_reduce(values, op=dist.ReduceOp.SUM)
         dist.all_reduce(count, op=dist.ReduceOp.SUM)
-    if count.item() > 0:
-        values = values / count.item()
+    if count.item() == 0:
+        raise RuntimeError(
+            "No samples were evaluated (empty dataset or loader); refusing to "
+            "report metrics."
+        )
+    values = values / count.item()
     return {k: v.item() for k, v in zip(keys, values)}
 
 
@@ -227,9 +231,14 @@ def build_test_loaders(
     preprocess = get_transforms()
     num_workers = dataloader_workers()
     loaders: dict[str, DataLoader] = {}
-    for name, ds_cfg in (cfg.get("test_datasets") or {}).items():
+    if not cfg.get("test_datasets"):
+        raise ValueError("The config has no test_datasets.")
+    allow_missing = bool(cfg.get("allow_missing_scenes", False))
+    for name, ds_cfg in cfg["test_datasets"].items():
         log_and_print(f"Loading test dataset: {name}")
+        ds_cfg.setdefault("allow_missing_scenes", allow_missing)
         ds = get_dataset(name, ds_cfg, preprocess)
+        log_and_print(f"  {check_dataset_not_empty(name, ds, ds_cfg)}")
         loaders[name] = DataLoader(
             ds,
             batch_size=batch_size,
@@ -291,6 +300,11 @@ def parse_args() -> tuple[argparse.Namespace, dict[str, Any]]:
         default=None,
         help="Measure render-only FPS and peak GPU memory (adds synchronization)",
     )
+    parser.add_argument(
+        "--allow-missing-scenes",
+        action="store_true",
+        help="Skip split scenes that are missing on disk (default: fail)",
+    )
     parser.add_argument("overrides", nargs="*", help="OmegaConf dotlist overrides")
     args = parser.parse_args()
 
@@ -309,6 +323,8 @@ def parse_args() -> tuple[argparse.Namespace, dict[str, Any]]:
         cfg_dict["scale_align_depth"] = args.scale_align_depth
     if args.profile_runtime is not None:
         cfg_dict["profile_runtime"] = args.profile_runtime
+    if args.allow_missing_scenes:
+        cfg_dict["allow_missing_scenes"] = True
     return args, cfg_dict
 
 

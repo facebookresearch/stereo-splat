@@ -102,6 +102,12 @@ export DATA_ROOT=/path/to/processed_datasets   # see "Data"
 export CKPT_ROOT=$PWD/checkpoints              # see "Pretrained weights"
 ```
 
+Training and evaluation stop with an error if a scene listed in a split file
+is missing under `DATA_ROOT` or a dataset ends up empty, and log the number of
+scenes and windows per dataset at startup. To run on a deliberately partial
+copy of the data, set `allow_missing_scenes: true` (globally or per dataset) or
+pass `--allow-missing-scenes`.
+
 ## Data
 
 See [`scripts/prepare_data/README.md`](scripts/prepare_data/README.md) for

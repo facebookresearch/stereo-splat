@@ -204,6 +204,34 @@ def load_intrinsics_individual(
     return np.broadcast_to(intrinsics, (len(indices), 3, 3)).copy()
 
 
+def report_missing_scenes(
+    dataset: str, root: str, missing: list[str], allow_missing: bool
+) -> None:
+    """Fail (or warn, if ``allow_missing``) when split scenes could not be loaded.
+
+    Args:
+        dataset: Dataset class name used in the message.
+        root: Dataset root directory.
+        missing: One entry per scene that could not be loaded.
+        allow_missing: Value of the ``allow_missing_scenes`` config flag.
+    """
+    if not missing:
+        return
+    details = "\n  ".join(missing)
+    message = (
+        f"{dataset}: {len(missing)} scene(s) listed in the split could not be "
+        f"loaded from {root}:\n  {details}"
+    )
+    if allow_missing:
+        print(f"Warning: {message}\nSkipping them (allow_missing_scenes: true).")
+        return
+    raise FileNotFoundError(
+        f"{message}\nCheck dataset_path / DATA_ROOT and the data preparation "
+        "output, or set `allow_missing_scenes: true` in the dataset config to "
+        "skip missing scenes explicitly."
+    )
+
+
 def get_num_frames_from_poses_individual(pose_path: str) -> int:
     """
     Get the total number of frames from an individual poses file.
