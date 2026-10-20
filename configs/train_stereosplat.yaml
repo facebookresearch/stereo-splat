@@ -71,9 +71,16 @@ loss:
   color_lpips_weight: 0.05
   depth_weight: 0.5
 
-# The paper model was trained on 80 GPUs (batch size 1 per GPU).
+# Resume an interrupted run from a training checkpoint (or pass --resume).
+resume_from: null
+
+# The paper model was trained on 80 GPUs with batch size 1 per GPU (effective
+# batch size 80); the LR schedule is per epoch. With fewer GPUs, either keep
+# the effective batch size with grad_accum_steps (e.g. 8 GPUs x 10 steps) or
+# scale lr / min_lr linearly with the effective batch size (see README).
 optimization:
   batch_size: 1
+  grad_accum_steps: 1
   epochs: 10
   lr: 0.001
   min_lr: 1.0e-05

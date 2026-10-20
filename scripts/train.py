@@ -14,13 +14,24 @@ Usage:
     # 8 GPUs on one node
     torchrun --nproc_per_node=8 scripts/train.py --config configs/train_stereosplat.yaml
 
+    # resume an interrupted run (or set ``resume_from`` in the config)
+    python scripts/train.py --config configs/train_stereosplat.yaml \
+        --resume outputs/stereosplat/checkpoints/last_checkpoint.pt
+
 Paths in the config use ``${oc.env:DATA_ROOT}`` / ``${oc.env:CKPT_ROOT}``;
 export those variables before launching.
+
+Checkpoints (``<output_dir>/checkpoints``): ``last_checkpoint.pt`` is written
+after every epoch and ``best_checkpoint.pt`` whenever the validation NVS PSNR
+improves. Both hold the model, optimizer and LR-scheduler state, the epoch,
+the global step, the best metric and the RNG states (torch, CUDA, numpy,
+python), so training resumes at the next epoch with the same LR schedule.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import math
 import os
 import random
@@ -61,30 +72,131 @@ def unwrap(model: torch.nn.Module) -> torch.nn.Module:
     return model.module if isinstance(model, DDP) else model
 
 
+def get_rng_state() -> dict[str, Any]:
+    """RNG states of torch (CPU and CUDA), numpy and python.
+
+    Stored as tensors / plain Python types so that the checkpoint can be
+    loaded with ``torch.load(weights_only=True)``.
+    """
+    np_state = np.random.get_state()
+    return {
+        "torch": torch.get_rng_state(),
+        "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
+        "numpy": {
+            "bit_generator": np_state[0],
+            "state": torch.from_numpy(np_state[1].astype(np.int64)),
+            "pos": int(np_state[2]),
+            "has_gauss": int(np_state[3]),
+            "cached_gaussian": float(np_state[4]),
+        },
+        "python": random.getstate(),
+    }
+
+
+def set_rng_state(state: dict[str, Any]) -> None:
+    torch.set_rng_state(state["torch"])
+    if torch.cuda.is_available() and state["cuda"]:
+        if len(state["cuda"]) == torch.cuda.device_count():
+            torch.cuda.set_rng_state_all(state["cuda"])
+        else:
+            log_and_print(
+                f"Checkpoint has {len(state['cuda'])} CUDA RNG states but "
+                f"{torch.cuda.device_count()} devices are visible; CUDA RNG "
+                "states are not restored."
+            )
+    np_state = state["numpy"]
+    np.random.set_state(
+        (
+            np_state["bit_generator"],
+            np_state["state"].numpy().astype(np.uint32),
+            np_state["pos"],
+            np_state["has_gauss"],
+            np_state["cached_gaussian"],
+        )
+    )
+    version, internal, gauss = state["python"]
+    random.setstate((version, tuple(internal), gauss))
+
+
 def save_checkpoint(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
     epoch: int,
+    global_step: int,
     nvs_psnr: float,
+    best_nvs_psnr: float,
     checkpoint_dir: str,
     rank: int,
-    name: str,
+    names: list[str],
 ) -> None:
-    """Write ``{checkpoint_dir}/{name}`` on rank 0."""
+    """Write the training state to ``{checkpoint_dir}/{name}`` on rank 0.
+
+    ``epoch`` is the last completed epoch (0-based); ``global_step`` counts
+    the training batches processed so far. RNG states are those of rank 0.
+    """
     if rank != 0:
         return
     os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint = {
         "epoch": epoch,
+        "global_step": global_step,
         "model_state_dict": unwrap(model).state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
+        "scheduler_state_dict": scheduler.state_dict(),
         "nvs_psnr": nvs_psnr,
+        "best_nvs_psnr": best_nvs_psnr,
+        "rng_state": get_rng_state(),
     }
-    path = os.path.join(checkpoint_dir, name)
-    torch.save(checkpoint, path)
+    for name in names:
+        path = os.path.join(checkpoint_dir, name)
+        tmp_path = f"{path}.tmp"
+        torch.save(checkpoint, tmp_path)
+        os.replace(tmp_path, path)
+        log_and_print(
+            f"Saved checkpoint (epoch {epoch}, step {global_step}, "
+            f"NVS PSNR {nvs_psnr:.4f}) to {path}"
+        )
+
+
+def resume_training_state(
+    path: str,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
+) -> dict[str, Any]:
+    """Restore a checkpoint written by :func:`save_checkpoint`.
+
+    Returns:
+        ``epoch`` (last completed epoch), ``global_step``, ``nvs_psnr`` and
+        ``best_nvs_psnr``.
+    """
+    ckpt = torch.load(path, map_location="cpu", weights_only=True)
+    missing = [
+        k
+        for k in ("scheduler_state_dict", "optimizer_state_dict", "rng_state")
+        if k not in ckpt
+    ]
+    if missing:
+        raise ValueError(
+            f"{path} is not a resumable training checkpoint (missing {missing}). "
+            "Use init_checkpoint_path to initialize the weights only."
+        )
+    unwrap(model).load_state_dict(ckpt["model_state_dict"], strict=True)
+    optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+    scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+    set_rng_state(ckpt["rng_state"])
     log_and_print(
-        f"Saved checkpoint (epoch {epoch}, NVS PSNR {nvs_psnr:.4f}) to {path}"
+        f"Resumed from {path}: completed epoch {ckpt['epoch']}, global step "
+        f"{ckpt['global_step']}, best NVS PSNR {ckpt['best_nvs_psnr']:.4f}, "
+        f"lr {optimizer.param_groups[0]['lr']:.6g}"
     )
+    return {
+        "epoch": ckpt["epoch"],
+        "global_step": ckpt["global_step"],
+        "nvs_psnr": ckpt["nvs_psnr"],
+        "best_nvs_psnr": ckpt["best_nvs_psnr"],
+    }
 
 
 def _make_loader(
@@ -241,23 +353,36 @@ def train_epoch(
     max_depth: float,
     log_every_n_steps: int = 100,
     grad_clip: float = 0.0,
+    grad_accum_steps: int = 1,
 ) -> None:
-    """Train for one epoch (in-view synthesis: all views are input and target)."""
+    """Train for one epoch (in-view synthesis: all views are input and target).
+
+    With ``grad_accum_steps > 1`` gradients of that many consecutive batches
+    are averaged before each optimizer step (the last step of an epoch may
+    use fewer batches).
+    """
     model.train()  # StereoSplat.train() keeps the frozen backbone in eval mode.
+    accum = max(1, int(grad_accum_steps))
+    num_batches = len(dataloader)
 
     for batch_idx, batch in enumerate(dataloader):
-        global_step = epoch * len(dataloader) + batch_idx
+        global_step = epoch * num_batches + batch_idx
         data = prepare_model_inputs(batch, device, max_depth)
 
         renderer_output, _, _ = render_batch(model, data, data)
         losses = loss_fn(renderer_output, data)
         total_loss = losses["total_loss"]
 
-        optimizer.zero_grad()
-        total_loss.backward()
-        if grad_clip > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-        optimizer.step()
+        step_now = (batch_idx + 1) % accum == 0 or batch_idx + 1 == num_batches
+        if accum == 1 or batch_idx % accum == 0:
+            optimizer.zero_grad()
+        no_sync = isinstance(model, DDP) and not step_now
+        with model.no_sync() if no_sync else contextlib.nullcontext():
+            (total_loss / accum if accum > 1 else total_loss).backward()
+        if step_now:
+            if grad_clip > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            optimizer.step()
 
         if batch_idx % log_every_n_steps == 0:
             values = {k: v.item() for k, v in losses.items()}
@@ -368,7 +493,12 @@ def evaluate_loader(
 def build_optimizer_and_scheduler(
     model: torch.nn.Module, opt_cfg: dict[str, Any], epochs: int
 ) -> tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]:
-    """AdamW + per-epoch linear warmup (from min_lr) and cosine decay to min_lr."""
+    """AdamW with a per-epoch LR schedule (``scheduler.step()`` once per epoch).
+
+    Epochs ``e < warmup_epochs`` use ``min_lr + (lr - min_lr) * e / warmup_epochs``
+    (so epoch 0 runs at ``min_lr``); afterwards the LR follows a cosine decay
+    from ``lr`` to ``min_lr`` at ``epochs``.
+    """
     lr = opt_cfg["lr"]
     min_lr = opt_cfg["min_lr"]
     warmup_epochs = opt_cfg["warmup_epochs"]
@@ -394,6 +524,12 @@ def parse_config() -> dict[str, Any]:
     parser.add_argument("--num-views", type=int, default=None)
     parser.add_argument("--output-dir", type=str, default=None)
     parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Training checkpoint to resume from (overrides resume_from)",
+    )
+    parser.add_argument(
         "--allow-missing-scenes",
         action="store_true",
         help="Skip split scenes that are missing on disk (default: fail)",
@@ -418,12 +554,18 @@ def parse_config() -> dict[str, Any]:
         cfg_dict.setdefault("logging", {})["output_dir"] = args.output_dir
     if args.allow_missing_scenes:
         cfg_dict["allow_missing_scenes"] = True
+    if args.resume is not None:
+        cfg_dict["resume_from"] = args.resume
     return cfg_dict
 
 
 def main() -> None:
     setup_logging()
-    cfg = parse_config()
+    train(parse_config())
+
+
+def train(cfg: dict[str, Any]) -> None:
+    """Run training (and the final test evaluation) for a resolved config."""
     rank, world_size, _local_rank, device = setup_distributed()
     log_and_print(f"Rank {rank}/{world_size} on {device}")
 
@@ -463,7 +605,18 @@ def main() -> None:
 
     best_nvs_psnr = 0.0
     last_nvs_psnr = 0.0
-    for epoch in range(epochs):
+    global_step = 0
+    start_epoch = 0
+    resume_from = cfg.get("resume_from")
+    if resume_from:
+        state = resume_training_state(resume_from, model, optimizer, scheduler)
+        start_epoch = state["epoch"] + 1
+        global_step = state["global_step"]
+        best_nvs_psnr = state["best_nvs_psnr"]
+        last_nvs_psnr = state["nvs_psnr"]
+        barrier()
+
+    for epoch in range(start_epoch, epochs):
         if train_sampler is not None:
             train_sampler.set_epoch(epoch)
         log_and_print(f"Starting epoch {epoch + 1}/{epochs}")
@@ -480,8 +633,10 @@ def main() -> None:
             max_depth,
             log_every_n_steps=opt_cfg.get("log_every_n_steps", 100),
             grad_clip=opt_cfg.get("grad_clip", 0.0),
+            grad_accum_steps=opt_cfg.get("grad_accum_steps", 1),
         )
         scheduler.step()
+        global_step += len(train_loader)
 
         if (epoch + 1) % validate_every == 0:
             # Validation metrics are rank-local averages (as in the paper runs);
@@ -501,32 +656,31 @@ def main() -> None:
                     reduce_across_ranks=False,
                 )
             last_nvs_psnr = metrics.get("psnr", 0.0)
-            if last_nvs_psnr > best_nvs_psnr:
+            improved = last_nvs_psnr > best_nvs_psnr
+            if improved:
                 best_nvs_psnr = last_nvs_psnr
-                save_checkpoint(
-                    model,
-                    optimizer,
-                    epoch,
-                    last_nvs_psnr,
-                    checkpoint_dir,
-                    rank,
-                    "best_checkpoint.pt",
-                )
             elif rank == 0:
                 log_and_print(
                     f"NVS PSNR {last_nvs_psnr:.4f} did not improve from best {best_nvs_psnr:.4f}"
                 )
+        else:
+            improved = False
 
-    save_checkpoint(
-        model,
-        optimizer,
-        epochs - 1,
-        last_nvs_psnr,
-        checkpoint_dir,
-        rank,
-        "last_checkpoint.pt",
-    )
-    barrier()
+        save_checkpoint(
+            model,
+            optimizer,
+            scheduler,
+            epoch,
+            global_step,
+            last_nvs_psnr,
+            best_nvs_psnr,
+            checkpoint_dir,
+            rank,
+            ["best_checkpoint.pt", "last_checkpoint.pt"]
+            if improved
+            else ["last_checkpoint.pt"],
+        )
+        barrier()
 
     for name, loader in test_loaders.items():
         for eval_nvs in (False, True):
