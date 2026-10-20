@@ -7,91 +7,75 @@
 from __future__ import annotations
 
 import itertools
-from math import exp
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from lpips import LPIPS
-from torch.autograd import Variable
 
-# The SSIM helpers below (gaussian, create_window, ssim, _ssim) are adapted from
-# pytorch-ssim (https://github.com/Po-Hsun-Su/pytorch-ssim), MIT License.
-# See third_party/README.md.
-
-
-def gaussian(window_size: int, sigma: float) -> torch.Tensor:
-    gauss = torch.Tensor(
-        [
-            exp(-((x - window_size // 2) ** 2) / float(2 * sigma**2))
-            for x in range(window_size)
-        ]
-    )
-    return gauss / gauss.sum()
+# SSIM (Wang et al., "Image quality assessment: from error visibility to
+# structural similarity", IEEE TIP 2004) with an isotropic Gaussian weighting
+# window, zero padding (output has the input size) and constants
+# C1 = (0.01 L)^2, C2 = (0.03 L)^2 for a dynamic range L = 1.
+SSIM_WINDOW_SIZE: int = 11
+SSIM_SIGMA: float = 1.5
+SSIM_C1: float = 0.01**2
+SSIM_C2: float = 0.03**2
 
 
-def create_window(window_size: int, channel: int) -> torch.Tensor:
-    _1D_window = gaussian(window_size, 1.5).unsqueeze(1)
-    _2D_window = _1D_window.mm(_1D_window.t()).float().unsqueeze(0).unsqueeze(0)
-    window = Variable(
-        _2D_window.expand(channel, 1, window_size, window_size).contiguous()
-    )
-    return window
+def gaussian_window(
+    size: int,
+    sigma: float,
+    channels: int,
+    dtype: torch.dtype = torch.float32,
+    device: torch.device | str | None = None,
+) -> torch.Tensor:
+    """Normalized 2-D Gaussian kernel as a depthwise conv weight [C, 1, k, k]."""
+    offsets = torch.arange(size, dtype=torch.float64) - (size // 2)
+    profile = torch.exp(-(offsets**2) / (2.0 * sigma**2)).to(torch.float32)
+    profile = profile / profile.sum()
+    kernel = torch.outer(profile, profile)
+    return kernel.expand(channels, 1, size, size).to(device=device, dtype=dtype)
 
 
 def ssim(
     img1: torch.Tensor,
     img2: torch.Tensor,
-    window_size: int = 11,
+    window_size: int = SSIM_WINDOW_SIZE,
     size_average: bool = True,
 ) -> torch.Tensor:
-    channel = img1.size(-3)
-    window = create_window(window_size, channel)
+    """Structural similarity of two image batches ``[N, C, H, W]``.
 
-    if img1.is_cuda:
-        window = window.cuda(img1.get_device())
-    window = window.type_as(img1)
-
-    return _ssim(img1, img2, window, window_size, channel, size_average)
-
-
-def _ssim(
-    img1: torch.Tensor,
-    img2: torch.Tensor,
-    window: torch.Tensor,
-    window_size: int,
-    channel: int,
-    size_average: bool = True,
-) -> torch.Tensor:
-    mu1 = F.conv2d(img1, window, padding=window_size // 2, groups=channel)
-    mu2 = F.conv2d(img2, window, padding=window_size // 2, groups=channel)
-
-    mu1_sq = mu1.pow(2)
-    mu2_sq = mu2.pow(2)
-    mu1_mu2 = mu1 * mu2
-
-    sigma1_sq = (
-        F.conv2d(img1 * img1, window, padding=window_size // 2, groups=channel) - mu1_sq
-    )
-    sigma2_sq = (
-        F.conv2d(img2 * img2, window, padding=window_size // 2, groups=channel) - mu2_sq
-    )
-    sigma12 = (
-        F.conv2d(img1 * img2, window, padding=window_size // 2, groups=channel)
-        - mu1_mu2
+    Local statistics are Gaussian-weighted (sigma 1.5) per channel. Returns the
+    mean SSIM over all pixels, channels and images (``size_average=True``) or
+    one value per image (``size_average=False``).
+    """
+    channels = img1.shape[-3]
+    weight = gaussian_window(
+        window_size, SSIM_SIGMA, channels, dtype=img1.dtype, device=img1.device
     )
 
-    C1 = 0.01**2
-    C2 = 0.03**2
+    def local_mean(x: torch.Tensor) -> torch.Tensor:
+        return F.conv2d(x, weight, padding=window_size // 2, groups=channels)
 
-    ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / (
-        (mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2)
-    )
+    mean_x = local_mean(img1)
+    mean_y = local_mean(img2)
+    mean_xx = mean_x**2
+    mean_yy = mean_y**2
+    mean_xy = mean_x * mean_y
+    var_x = local_mean(img1 * img1) - mean_xx
+    var_y = local_mean(img2 * img2) - mean_yy
+    cov_xy = local_mean(img1 * img2) - mean_xy
+
+    luminance = 2.0 * mean_xy + SSIM_C1
+    structure = 2.0 * cov_xy + SSIM_C2
+    norm = (mean_xx + mean_yy + SSIM_C1) * (var_x + var_y + SSIM_C2)
+    ssim_map = luminance * structure / norm
 
     if size_average:
         return ssim_map.mean()
-    else:
-        return ssim_map.mean(1).mean(1).mean(1)
+    per_pixel = ssim_map.mean(dim=1)  # average over channels first
+    return per_pixel.mean(dim=1).mean(dim=1)
 
 
 # ------------------------------------------------------------------

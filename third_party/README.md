@@ -27,7 +27,6 @@ from https://github.com/facebookresearch/dinov2 (Apache-2.0); set
 |---|---|---|
 | `stereosplat/models/gaussian_adapter.py`, `stereosplat/rendering/renderer.py`, `stereosplat/rendering/gaussians.py`, `stereosplat/utils/geometry.py`, `stereosplat/utils/sh.py` | Depth Anything 3, https://github.com/ByteDance-Seed/Depth-Anything-3 (modified) | Apache-2.0 (header kept in each file) |
 | quaternion / rotation helpers in `stereosplat/utils/geometry.py` (via Depth Anything 3) | PyTorch3D, https://github.com/facebookresearch/pytorch3d | BSD-3-Clause |
-| SSIM helpers in `stereosplat/losses/rendering_losses.py` | pytorch-ssim, https://github.com/Po-Hsun-Su/pytorch-ssim (modified) | MIT |
 
 ## Python dependencies
 

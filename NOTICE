@@ -16,10 +16,6 @@ PyTorch3D (https://github.com/facebookresearch/pytorch3d)
   Licensed under the BSD 3-Clause License
   Quaternion helpers in stereosplat/utils/geometry.py
 
-pytorch-ssim (https://github.com/Po-Hsun-Su/pytorch-ssim)
-  Licensed under the MIT License
-  SSIM helpers in stereosplat/losses/rendering_losses.py
-
 FoundationStereo (https://github.com/NVlabs/FoundationStereo) is used as an
 external dependency (git submodule at third_party/FoundationStereo) under the
 NVIDIA Source Code License. It is not distributed with this repository.
