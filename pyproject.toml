@@ -35,8 +35,26 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
 
-[tool.setuptools.packages.find]
-include = ["stereosplat*"]
+[tool.setuptools]
+# data/splits is installed as stereosplat/splits so that split files resolve
+# from a regular (non-editable) install; see stereosplat.datasets.factory.
+packages = [
+    "stereosplat",
+    "stereosplat.backbones",
+    "stereosplat.datasets",
+    "stereosplat.evaluation",
+    "stereosplat.losses",
+    "stereosplat.models",
+    "stereosplat.rendering",
+    "stereosplat.utils",
+    "stereosplat.splits",
+]
+
+[tool.setuptools.package-dir]
+"stereosplat.splits" = "data/splits"
+
+[tool.setuptools.package-data]
+"stereosplat.splits" = ["*/*.txt"]
 
 [tool.ruff]
 line-length = 88

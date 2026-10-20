@@ -13,10 +13,11 @@ Virtual KITTI 2, all read from the processed per-frame layout on local disk.
 
 from __future__ import annotations
 
+import importlib.resources
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from torch.utils.data import Dataset
 
@@ -26,17 +27,33 @@ from stereosplat.datasets.tartan import TartanAirDataset
 from stereosplat.datasets.tartanv2 import TartanAirV2Dataset
 from stereosplat.datasets.vkitti2 import VKITTI2Dataset
 
+if TYPE_CHECKING:
+    from importlib.abc import Traversable
+
 # Repository root (the directory that contains ``data/splits``).
 REPO_ROOT: Path = Path(__file__).resolve().parents[2]
+
+
+SPLITS_PREFIX: str = "data/splits/"
+
+
+def _packaged_split(relative: str) -> Traversable | None:
+    """Split file shipped inside the installed package (``stereosplat/splits``)."""
+    resource = importlib.resources.files("stereosplat") / "splits"
+    for part in relative.split("/"):
+        resource = resource / part
+    return resource if resource.is_file() else None
 
 
 def load_split_file(split_file_path: str) -> list[str]:
     """
     Load a split file containing scene names (one per line).
 
-    Relative paths are resolved against the current working directory first
-    and then against the repository root, so ``data/splits/tartanv2/test.txt``
-    works from anywhere.
+    Relative paths are resolved against the current working directory, then
+    the repository root (source checkout / editable install). Paths of the
+    form ``data/splits/<name>/<split>.txt`` also resolve to the copy installed
+    with the package, so the shipped configs work from a regular
+    ``pip install .`` outside the repository.
 
     Args:
         split_file_path: Absolute path, or path relative to cwd / repo root.
@@ -44,16 +61,22 @@ def load_split_file(split_file_path: str) -> list[str]:
     Returns:
         Sorted list of scene names from the split file.
     """
-    candidates = [Path(split_file_path)]
+    candidates: list[Path | Traversable] = [Path(split_file_path)]
     if not os.path.isabs(split_file_path):
         candidates.append(REPO_ROOT / split_file_path)
+        normalized = Path(split_file_path).as_posix()
+        if normalized.startswith(SPLITS_PREFIX):
+            packaged = _packaged_split(normalized[len(SPLITS_PREFIX) :])
+            if packaged is not None:
+                candidates.append(packaged)
     for path in candidates:
         if path.is_file():
-            with open(path) as f:
-                return sorted([line.strip() for line in f.readlines() if line.strip()])
+            text = path.read_text()
+            return sorted([line.strip() for line in text.splitlines() if line.strip()])
 
     raise FileNotFoundError(
-        f"Split file not found: {split_file_path} (also tried {candidates[-1]})."
+        f"Split file not found: {split_file_path} (also tried "
+        f"{REPO_ROOT / split_file_path} and the splits installed with the package)."
     )
 
 

@@ -95,6 +95,8 @@ def build_foundation_stereo_backbone(
 
     if load_weights:
         ckpt_path = os.path.join(fs_checkpoint_path, "model_best_bp2.pth")
+        # The NVIDIA checkpoint pickles OmegaConf / numpy objects, which the
+        # weights_only unpickler rejects; only load it from the official source.
         ckpt = torch.load(ckpt_path, weights_only=False, map_location="cpu")
         backbone.load_state_dict(ckpt["model"])
 
@@ -168,7 +170,9 @@ def load_checkpoint(
     cover every non-backbone key; missing keys are allowed only under
     ``fs_model.`` (those weights come from the FoundationStereo checkpoint).
     """
-    ckpt = torch.load(checkpoint_path, map_location=map_location, weights_only=False)
+    # Release and training checkpoints hold only tensors and plain Python
+    # containers, so the restricted (safe) unpickler is sufficient.
+    ckpt = torch.load(checkpoint_path, map_location=map_location, weights_only=True)
     if "version" in ckpt:
         state = remap_state_dict(ckpt["state_dict"])
         missing, unexpected = model.load_state_dict(state, strict=False)

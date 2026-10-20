@@ -64,6 +64,10 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+A regular `pip install .` also works (the split files in `data/splits` are
+installed with the package); in that case set `FOUNDATION_STEREO_ROOT` (see
+below), since `third_party/` is not part of the installed package.
+
 `gsplat` compiles its CUDA kernels on first use; this needs a CUDA toolkit
 (`nvcc`) matching your PyTorch build. Alternatively install a prebuilt `gsplat`
 wheel matching your PyTorch/CUDA versions.

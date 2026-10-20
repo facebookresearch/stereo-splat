@@ -41,6 +41,11 @@ naming the expected upstream symbol, if the FoundationStereo code differs.
 | `stereosplat/models/gaussian_adapter.py`, `stereosplat/rendering/renderer.py`, `stereosplat/rendering/gaussians.py`, `stereosplat/utils/geometry.py`, `stereosplat/utils/sh.py` | Depth Anything 3, https://github.com/ByteDance-Seed/Depth-Anything-3 (modified) | Apache-2.0 (header kept in each file) |
 | quaternion / rotation helpers in `stereosplat/utils/geometry.py` (via Depth Anything 3) | PyTorch3D, https://github.com/facebookresearch/pytorch3d | BSD-3-Clause |
 
+License texts of the adapted code are in `third_party/licenses/`:
+`Apache-2.0.txt` (standard Apache License 2.0 text, as shipped in the gsplat
+1.4.0 wheel) and `PyTorch3D-BSD-3-Clause.txt` (from the pytorch3d 0.7.4 wheel
+on PyPI).
+
 ## Python dependencies
 
 Installed from PyPI (see `requirements.txt`), not redistributed: gsplat

@@ -246,7 +246,7 @@ def load_model_config(
     Release checkpoints carry their model config. For training checkpoints the
     ``model`` section (and ``max_depth``) of ``config_path`` is used.
     """
-    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     if isinstance(ckpt, Mapping) and "config" in ckpt and config_path is None:
         return dict(ckpt["config"])
     if config_path is None:
