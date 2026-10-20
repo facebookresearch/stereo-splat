@@ -86,9 +86,10 @@ git submodule update --init --recursive
 To use a FoundationStereo checkout elsewhere, set
 `FOUNDATION_STEREO_ROOT=/path/to/FoundationStereo`. The DINOv2 code used inside
 FoundationStereo is fetched with `torch.hub` from
-[facebookresearch/dinov2](https://github.com/facebookresearch/dinov2) the first
-time the model is built (set `STEREOSPLAT_DINOV2_REPO` to a local dinov2
-checkout to work offline). No pretrained weights are downloaded through
+[facebookresearch/dinov2](https://github.com/facebookresearch/dinov2) at the
+pinned commit `7764ea0f912e53c92e82eb78a2a1631e92725fc8` the first time the
+model is built (set `STEREOSPLAT_DINOV2_REPO` to a local dinov2 checkout of that
+commit to work offline). No pretrained weights are downloaded through
 `torch.hub`/`timm`; all backbone weights come from the FoundationStereo
 checkpoint.
 

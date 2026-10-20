@@ -28,12 +28,20 @@ They are all applied from the outside:
 * Offline construction: the backbone weights come from the FoundationStereo
   checkpoint, so the ImageNet EdgeNeXt weights (``timm``) and the DINOv2 hub
   weights are never downloaded (``pretrained=False``). DINOv2 code is loaded
-  through ``torch.hub`` from ``facebookresearch/dinov2`` (or from a local
-  checkout given by ``STEREOSPLAT_DINOV2_REPO``).
+  through ``torch.hub`` from ``facebookresearch/dinov2`` pinned to commit
+  ``DINOV2_COMMIT`` (or from a local checkout given by
+  ``STEREOSPLAT_DINOV2_REPO``).
 * Optional packages imported by the upstream ``Utils.py`` but not needed by
   the network are replaced by placeholders if they are not installed.
 * ``bilinear_sampler`` runs ``grid_sample`` with cuDNN disabled, matching the
   setup used to produce the paper results.
+
+Every runtime patch is checked: if the upstream code no longer exposes or
+calls the patched symbol (``core.foundation_stereo.normalize_image``,
+``core.geometry.bilinear_sampler``, the ``feature`` / ``stem_2`` / ``cnet``
+submodules, ``torch.hub.load("facebookresearch/dinov2", ...)``), a
+:class:`FoundationStereoAdapterError` naming the symbol is raised instead of
+silently computing different features (e.g. normalizing inputs twice).
 """
 
 from __future__ import annotations
@@ -53,8 +61,24 @@ from torch import nn
 REPO_ROOT: Path = Path(__file__).resolve().parents[2]
 DEFAULT_FOUNDATION_STEREO_ROOT: Path = REPO_ROOT / "third_party" / "FoundationStereo"
 DINOV2_HUB_REPO: str = "facebookresearch/dinov2"
+# DINOv2 code revision used to produce the paper results.
+DINOV2_COMMIT: str = "7764ea0f912e53c92e82eb78a2a1631e92725fc8"
+DINOV2_HUB_REF: str = f"{DINOV2_HUB_REPO}:{DINOV2_COMMIT}"
 
 _UPSTREAM: dict[str, types.ModuleType] = {}
+_BILINEAR_CALLS: list[int] = [0]
+
+
+class FoundationStereoAdapterError(RuntimeError):
+    """The upstream FoundationStereo code does not match what the adapter patches."""
+
+
+def _mismatch(symbol: str, detail: str) -> FoundationStereoAdapterError:
+    return FoundationStereoAdapterError(
+        f"FoundationStereo adapter: {detail} Expected upstream symbol: {symbol}. "
+        "The FoundationStereo checkout probably differs from the revision this "
+        "adapter was written for (see third_party/README.md)."
+    )
 
 
 def _resolve_root(root: str | os.PathLike[str] | None) -> Path:
@@ -105,6 +129,7 @@ def _ensure_utils_module(max_stubs: int = 32) -> list[str]:
 def _cudnn_disabled(fn: Any) -> Any:
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
+        _BILINEAR_CALLS[0] += 1
         with torch.backends.cudnn.flags(enabled=False):
             return fn(*args, **kwargs)
 
@@ -125,6 +150,15 @@ def import_upstream(
     import core.foundation_stereo as fs_module
     import core.geometry as geometry_module
 
+    if not callable(getattr(fs_module, "normalize_image", None)):
+        raise _mismatch(
+            "core.foundation_stereo.normalize_image",
+            "input normalization function not found.",
+        )
+    if not callable(getattr(geometry_module, "bilinear_sampler", None)):
+        raise _mismatch(
+            "core.geometry.bilinear_sampler", "sampling function not found."
+        )
     if not getattr(
         geometry_module.bilinear_sampler, "_stereosplat_cudnn_disabled", False
     ):
@@ -144,19 +178,27 @@ def _offline_construction(dinov2_repo: str | None) -> Iterator[None]:
     orig_create = timm.create_model
     orig_hub_load = torch.hub.load
     local_repo = dinov2_repo or os.environ.get("STEREOSPLAT_DINOV2_REPO")
+    dinov2_loads: list[str] = []
 
     def create_model(*args: Any, **kwargs: Any) -> Any:
         kwargs["pretrained"] = False
         return orig_create(*args, **kwargs)
 
     def hub_load(repo_or_dir: str, model: str, *args: Any, **kwargs: Any) -> Any:
-        if repo_or_dir == DINOV2_HUB_REPO:
-            kwargs["pretrained"] = False
-            if local_repo and Path(local_repo).is_dir():
-                kwargs["source"] = "local"
-                return orig_hub_load(local_repo, model, *args, **kwargs)
-            return orig_hub_load(local_repo or repo_or_dir, model, *args, **kwargs)
-        return orig_hub_load(repo_or_dir, model, *args, **kwargs)
+        if str(repo_or_dir).split(":")[0] != DINOV2_HUB_REPO:
+            return orig_hub_load(repo_or_dir, model, *args, **kwargs)
+        dinov2_loads.append(model)
+        kwargs["pretrained"] = False
+        if local_repo and Path(local_repo).is_dir():
+            kwargs["source"] = "local"
+            return orig_hub_load(local_repo, model, *args, **kwargs)
+        if local_repo:
+            # A GitHub "owner/repo[:ref]" given by the user.
+            return orig_hub_load(local_repo, model, *args, **kwargs)
+        # torch.hub only validates refs that are branch or tag heads; the
+        # pinned commit is fixed here, so validation is skipped.
+        kwargs["skip_validation"] = True
+        return orig_hub_load(DINOV2_HUB_REF, model, *args, **kwargs)
 
     timm.create_model = create_model
     torch.hub.load = hub_load
@@ -165,19 +207,59 @@ def _offline_construction(dinov2_repo: str | None) -> Iterator[None]:
     finally:
         timm.create_model = orig_create
         torch.hub.load = orig_hub_load
+    if not dinov2_loads:
+        raise _mismatch(
+            f'torch.hub.load("{DINOV2_HUB_REPO}", "dinov2_vit*14", ...) '
+            "(depth_anything/dpt.py)",
+            "the DINOv2 backbone was not loaded through torch.hub, so the pinned "
+            "DINOv2 revision and pretrained=False were not applied.",
+        )
 
 
 @contextlib.contextmanager
-def _identity_input_normalization(fs_module: types.ModuleType) -> Iterator[None]:
+def _identity_input_normalization(fs_module: types.ModuleType) -> Iterator[list[int]]:
+    """Replace ``normalize_image`` by the identity; yields a call counter."""
+    calls = [0]
+
+    def identity(img: torch.Tensor) -> torch.Tensor:
+        calls[0] += 1
+        return img
+
     orig = fs_module.normalize_image
-    fs_module.normalize_image = lambda img: img
+    fs_module.normalize_image = identity
     try:
-        yield
+        yield calls
     finally:
         fs_module.normalize_image = orig
 
 
-def _make_backbone_class(fs_module: types.ModuleType) -> type[nn.Module]:
+def _check_patches_applied(
+    geometry_module: types.ModuleType, normalize_calls: int, bilinear_calls: int
+) -> None:
+    if normalize_calls < 2:
+        raise _mismatch(
+            "core.foundation_stereo.normalize_image",
+            f"the identity replacement was called {normalize_calls} time(s) instead "
+            "of once per input image, so FoundationStereo would normalize the "
+            "already-normalized inputs again.",
+        )
+    if not getattr(
+        geometry_module.bilinear_sampler, "_stereosplat_cudnn_disabled", False
+    ):
+        raise _mismatch(
+            "core.geometry.bilinear_sampler",
+            "the cuDNN-disabled wrapper was replaced.",
+        )
+    if bilinear_calls == 0:
+        raise _mismatch(
+            "core.geometry.bilinear_sampler",
+            "the cuDNN-disabled wrapper was never called during the forward pass.",
+        )
+
+
+def _make_backbone_class(
+    fs_module: types.ModuleType, geometry_module: types.ModuleType
+) -> type[nn.Module]:
     base = fs_module.FoundationStereo
 
     class FoundationStereoBackbone(base):  # type: ignore[misc, valid-type]
@@ -205,19 +287,41 @@ def _make_backbone_class(fs_module: types.ModuleType) -> type[nn.Module]:
 
             handles = []
             if return_features:
-                handles = [
-                    self.feature.register_forward_hook(_capture("feature")),
-                    self.stem_2.register_forward_hook(_capture("stem")),
-                    self.cnet.register_forward_hook(_capture("cnet")),
-                ]
+                for attr, name in (
+                    ("feature", "feature"),
+                    ("stem_2", "stem"),
+                    ("cnet", "cnet"),
+                ):
+                    module = getattr(self, attr, None)
+                    if not isinstance(module, nn.Module):
+                        raise _mismatch(
+                            f"FoundationStereo.{attr}", "submodule not found."
+                        )
+                    handles.append(module.register_forward_hook(_capture(name)))
+            bilinear_before = _BILINEAR_CALLS[0]
             try:
-                with _identity_input_normalization(fs_module):
+                with _identity_input_normalization(fs_module) as normalize_calls:
                     disp = super().forward(image1, image2, iters=iters, test_mode=True)
             finally:
                 for h in handles:
                     h.remove()
+            _check_patches_applied(
+                geometry_module,
+                normalize_calls[0],
+                _BILINEAR_CALLS[0] - bilinear_before,
+            )
             if not return_features:
                 return disp, None
+            for name, attr in (
+                ("feature", "feature"),
+                ("stem", "stem_2"),
+                ("cnet", "cnet"),
+            ):
+                if name not in captured:
+                    raise _mismatch(
+                        f"FoundationStereo.{attr}",
+                        "the feature hook did not fire during the forward pass.",
+                    )
 
             batch = len(image1)
             vit_feat = captured["feature"][1]
@@ -252,10 +356,12 @@ def build_foundation_stereo(
             loaded with ``OmegaConf.load``.
         root: FoundationStereo checkout (default: ``FOUNDATION_STEREO_ROOT`` or
             ``third_party/FoundationStereo``).
-        dinov2_repo: Optional local DINOv2 checkout used instead of the
-            ``facebookresearch/dinov2`` torch.hub repository.
+        dinov2_repo: Optional local DINOv2 checkout (or torch.hub
+            ``owner/repo:ref``) used instead of ``DINOV2_HUB_REF``.
     """
     modules = import_upstream(root)
-    backbone_cls = _make_backbone_class(modules["foundation_stereo"])
+    backbone_cls = _make_backbone_class(
+        modules["foundation_stereo"], modules["geometry"]
+    )
     with _offline_construction(dinov2_repo):
         return backbone_cls(cfg)

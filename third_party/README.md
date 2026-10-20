@@ -7,9 +7,18 @@ StereoSplat uses the frozen FoundationStereo stereo network
 non-commercial). Its source code is **not** included in this repository. It is
 expected as a git submodule at `third_party/FoundationStereo`:
 
+> **TODO(owner): pin FoundationStereo.** The commit below is a placeholder.
+> GitHub was not reachable when this export was prepared, so no submodule
+> (`.gitmodules`) and no commit SHA are recorded yet. Add the submodule at a
+> fixed NVlabs commit, replace `<pinned commit>` with its full SHA, and re-run
+> `pytest tests/test_foundation_stereo_adapter.py` with
+> `FOUNDATION_STEREO_ROOT` and `FOUNDATION_STEREO_CKPT_DIR` set (golden values).
+> The adapter was validated against a mirror of the upstream code
+> (huggingface.co/spaces/shriarul5273/FoundationStereo_demo, commit df3ea63).
+
 ```bash
 git submodule add https://github.com/NVlabs/FoundationStereo third_party/FoundationStereo
-git -C third_party/FoundationStereo checkout <pinned commit>
+git -C third_party/FoundationStereo checkout <pinned commit>  # TODO(owner)
 ```
 
 or anywhere else via `export FOUNDATION_STEREO_ROOT=/path/to/FoundationStereo`.
@@ -18,8 +27,12 @@ adapts them at runtime (input normalization, feature taps, offline
 construction); see the module docstring. StereoSplat uses the public ViT-S
 weights ("11-33-40": `cfg.yaml` + `model_best_bp2.pth`) distributed by NVIDIA.
 The DINOv2 backbone code inside FoundationStereo is loaded through `torch.hub`
-from https://github.com/facebookresearch/dinov2 (Apache-2.0); set
-`STEREOSPLAT_DINOV2_REPO` to use a local checkout instead.
+from https://github.com/facebookresearch/dinov2 (Apache-2.0), pinned to commit
+`7764ea0f912e53c92e82eb78a2a1631e92725fc8` (`DINOV2_HUB_REF` in
+`stereosplat/backbones/foundation_stereo.py`); set `STEREOSPLAT_DINOV2_REPO` to
+use a local checkout of that commit instead. The adapter checks at runtime that
+each of its patches took effect and raises `FoundationStereoAdapterError`,
+naming the expected upstream symbol, if the FoundationStereo code differs.
 
 ## Code adapted from other projects
 
