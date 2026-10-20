@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "stereosplat"
 version = "1.0.0"
 description = "StereoSplat: metric-scale novel view synthesis via stereo-grounded Gaussian splatting"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [{ name = "Meta Platforms, Inc. and affiliates" }]
 dependencies = [
@@ -26,7 +28,7 @@ dependencies = [
     "tensorboard",
     "tqdm",
     "plyfile",
-    "scipy",
+    "scipy>=1.14",
     "huggingface_hub",
 ]
 
