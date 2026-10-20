@@ -14,6 +14,7 @@
 #
 # Modified by Meta Platforms, Inc. and affiliates for StereoSplat.
 # Derived from Depth Anything 3 (https://github.com/ByteDance-Seed/Depth-Anything-3).
+
 from dataclasses import dataclass
 
 import torch

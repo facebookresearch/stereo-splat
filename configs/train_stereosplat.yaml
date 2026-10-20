@@ -1,7 +1,7 @@
 # StereoSplat training recipe (paper "v3" recipe).
 #
-# Differences from the paper-final run: the paper model was additionally
-# trained on an internal dataset (XRStereo) that is not public; this recipe
+# Difference from the paper-final run: the paper model was additionally
+# trained on the XRStereo dataset, which is not publicly released; this recipe
 # uses the public TartanAir (v1) and Infinigen training sets only.
 #
 # Paths are read from the environment:

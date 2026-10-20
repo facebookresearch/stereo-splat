@@ -1,4 +1,3 @@
-# flake8: noqa: F722
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,7 @@
 #
 # Modified by Meta Platforms, Inc. and affiliates for StereoSplat.
 # Derived from Depth Anything 3 (https://github.com/ByteDance-Seed/Depth-Anything-3).
+
 from types import SimpleNamespace
 
 import numpy as np

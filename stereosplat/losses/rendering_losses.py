@@ -15,6 +15,10 @@ import torch.nn.functional as F
 from lpips import LPIPS
 from torch.autograd import Variable
 
+# The SSIM helpers below (gaussian, create_window, ssim, _ssim) are adapted from
+# pytorch-ssim (https://github.com/Po-Hsun-Su/pytorch-ssim), MIT License.
+# See third_party/README.md.
+
 
 def gaussian(window_size: int, sigma: float) -> torch.Tensor:
     gauss = torch.Tensor(
