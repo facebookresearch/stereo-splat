@@ -44,6 +44,8 @@ training_datasets:
     stride: 1
     num_samples: -1
 
+# Evaluated once after training. Disable a dataset with an override such as
+# test_datasets.kitti=null (or all of them with test_datasets=null).
 test_datasets:
   infinigen:
     dataset_path: ${oc.env:DATA_ROOT}/infinigen_processed
@@ -87,4 +89,6 @@ optimization:
   warmup_epochs: 1
   validate_every: 1
   log_every_n_steps: 100
+  # TensorBoard comparison image interval (default: log_every_n_steps).
+  vis_every_n_steps: null
   grad_clip: 0.0

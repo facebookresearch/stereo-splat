@@ -219,3 +219,23 @@ def test_resume_rejects_weights_only_checkpoint(tmp_path) -> None:
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda e: 1.0)
     with pytest.raises(ValueError, match="init_checkpoint_path"):
         train.resume_training_state(str(path), model, opt, sched)
+
+
+def test_resolve_dataset_configs_drops_null_entries() -> None:
+    train = _load_train_script()
+    config = {
+        "num_views": 3,
+        "allow_missing_scenes": False,
+        "training_datasets": {"tartan": {"stride": 5}, "infinigen": None},
+        "test_datasets": {"kitti": None, "tartanv2": {"allow_missing_scenes": True}},
+    }
+    train.resolve_dataset_configs(config)
+    assert config["training_datasets"] == {
+        "tartan": {"stride": 5, "num_views": 3, "allow_missing_scenes": False}
+    }
+    assert config["test_datasets"] == {
+        "tartanv2": {"allow_missing_scenes": True, "num_views": 3}
+    }
+    config["test_datasets"] = None
+    train.resolve_dataset_configs(config)
+    assert config["test_datasets"] == {}

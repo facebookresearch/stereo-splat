@@ -222,16 +222,28 @@ def _make_loader(
     )
 
 
+def resolve_dataset_configs(config: dict[str, Any]) -> None:
+    """Drop disabled (``null``) dataset entries and set per-dataset defaults.
+
+    A dataset set to ``null`` (e.g. the override ``test_datasets.kitti=null``)
+    is skipped. ``num_views`` and ``allow_missing_scenes`` come from the
+    top-level config (``allow_missing_scenes`` only if not set per dataset).
+    """
+    num_views = config["num_views"]
+    allow_missing = bool(config.get("allow_missing_scenes", False))
+    for ds_type in ["training_datasets", "test_datasets"]:
+        entries = config.get(ds_type) or {}
+        config[ds_type] = {k: v for k, v in entries.items() if v is not None}
+        for ds_cfg in config[ds_type].values():
+            ds_cfg["num_views"] = num_views
+            ds_cfg.setdefault("allow_missing_scenes", allow_missing)
+
+
 def create_dataloaders(
     config: dict[str, Any], rank: int, world_size: int
 ) -> tuple[DataLoader, DataLoader, dict[str, DataLoader], DistributedSampler | None]:
     """Train / validation (10% random split of train) / test dataloaders."""
-    num_views = config["num_views"]
-    allow_missing = bool(config.get("allow_missing_scenes", False))
-    for ds_type in ["training_datasets", "test_datasets"]:
-        for ds_name in config.get(ds_type) or {}:
-            config[ds_type][ds_name]["num_views"] = num_views
-            config[ds_type][ds_name].setdefault("allow_missing_scenes", allow_missing)
+    resolve_dataset_configs(config)
     if not config.get("training_datasets"):
         raise ValueError("The config has no training_datasets.")
 
@@ -354,8 +366,12 @@ def train_epoch(
     log_every_n_steps: int = 100,
     grad_clip: float = 0.0,
     grad_accum_steps: int = 1,
+    vis_every_n_steps: int | None = None,
 ) -> None:
     """Train for one epoch (in-view synthesis: all views are input and target).
+
+    Losses are logged every ``log_every_n_steps`` batches and the comparison
+    image every ``vis_every_n_steps`` batches (default: same as the losses).
 
     With ``grad_accum_steps > 1`` gradients of that many consecutive batches
     are averaged before each optimizer step (the last step of an epoch may
@@ -363,6 +379,7 @@ def train_epoch(
     """
     model.train()  # StereoSplat.train() keeps the frozen backbone in eval mode.
     accum = max(1, int(grad_accum_steps))
+    vis_every = vis_every_n_steps or log_every_n_steps
     num_batches = len(dataloader)
 
     for batch_idx, batch in enumerate(dataloader):
@@ -392,18 +409,18 @@ def train_epoch(
                 writer.add_scalar(
                     "train/lr", optimizer.param_groups[0]["lr"], global_step
                 )
-                vis = np.array(visualize_sample(renderer_output, data))
-                writer.add_image(
-                    "train/comparison", vis, global_step, dataformats="HWC"
-                )
             log_and_print(
                 f"[Epoch {epoch}] [Rank {rank}/{world_size}] "
                 f"[Batch {batch_idx}/{len(dataloader)}] "
                 f"Loss: {values['total_loss']:.4f} "
                 f"(color: {values['color_loss']:.4f}, depth: {values['depth_loss']:.4f}, "
                 f"l1: {values['color_l1_loss']:.4f}, ssim: {values['color_ssim_loss']:.4f}, "
-                f"lpips: {values['color_lpips_loss']:.4f})"
+                f"lpips: {values['color_lpips_loss']:.4f}) "
+                f"lr: {optimizer.param_groups[0]['lr']:.6g}"
             )
+        if rank == 0 and writer is not None and batch_idx % vis_every == 0:
+            vis = np.array(visualize_sample(renderer_output, data))
+            writer.add_image("train/comparison", vis, global_step, dataformats="HWC")
 
     barrier()
 
@@ -634,6 +651,7 @@ def train(cfg: dict[str, Any]) -> None:
             log_every_n_steps=opt_cfg.get("log_every_n_steps", 100),
             grad_clip=opt_cfg.get("grad_clip", 0.0),
             grad_accum_steps=opt_cfg.get("grad_accum_steps", 1),
+            vis_every_n_steps=opt_cfg.get("vis_every_n_steps"),
         )
         scheduler.step()
         global_step += len(train_loader)
