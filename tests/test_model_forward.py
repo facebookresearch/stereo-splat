@@ -12,7 +12,13 @@ import pytest
 import torch
 from conftest import MODEL_CONFIG, StubBackbone, make_window
 
-from stereosplat.models.build import build_model, load_checkpoint, remap_state_dict
+from stereosplat.models.build import (
+    build_model,
+    load_checkpoint,
+    read_checkpoint,
+    remap_state_dict,
+    save_release_checkpoint,
+)
 
 HEAD_PREFIXES = {
     "block_context0",
@@ -124,6 +130,42 @@ def test_checkpoint_roundtrip(tmp_path, stub_model) -> None:
     torch.save({"version": 1, "config": MODEL_CONFIG, "state_dict": bad}, release)
     with pytest.raises(RuntimeError):
         load_checkpoint(model, str(release))
+
+
+def test_safetensors_release_checkpoint(tmp_path, stub_model) -> None:
+    head = {
+        k: v
+        for k, v in stub_model.state_dict().items()
+        if not k.startswith("fs_model.")
+    }
+    config = {k: v for k, v in MODEL_CONFIG.items() if k != "fs_checkpoint_path"}
+    path = tmp_path / "release.safetensors"
+    save_release_checkpoint(path, head, config)
+    ckpt = read_checkpoint(path)
+    assert ckpt["version"] == 1
+    assert ckpt["config"] == config
+    assert ckpt["state_dict"].keys() == head.keys()
+    for k, v in head.items():
+        assert torch.equal(ckpt["state_dict"][k], v), k
+        assert ckpt["state_dict"][k].dtype == v.dtype, k
+
+    model = build_model(MODEL_CONFIG, backbone=StubBackbone())
+    meta = load_checkpoint(model, str(path))
+    assert meta["version"] == 1
+    for k, v in head.items():
+        assert torch.equal(model.state_dict()[k], v), k
+
+    bad = dict(head)
+    bad.pop("gaussian_head.weight")
+    save_release_checkpoint(path, bad, config)
+    with pytest.raises(RuntimeError):
+        load_checkpoint(model, str(path))
+
+    from safetensors.torch import save_file
+
+    save_file({k: v.contiguous() for k, v in head.items()}, str(path))
+    with pytest.raises(RuntimeError, match="metadata"):
+        read_checkpoint(path)
 
 
 def test_remap_strips_ddp_prefix() -> None:

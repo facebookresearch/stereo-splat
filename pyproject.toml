@@ -28,6 +28,7 @@ dependencies = [
     "tensorboard",
     "tqdm",
     "plyfile",
+    "safetensors",
     "scipy>=1.14",
     "huggingface_hub",
 ]

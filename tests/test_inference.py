@@ -24,6 +24,7 @@ from stereosplat.inference import (
     scene_target_depth,
     stereo_world_to_camera,
 )
+from stereosplat.models.build import save_release_checkpoint
 from stereosplat.utils.ply import load_ply, save_ply
 
 
@@ -102,15 +103,16 @@ def test_orbit_cameras() -> None:
         np.testing.assert_allclose(R[:, 2], direction, atol=1e-9)
 
 
-def test_pipeline_release_checkpoint_to_ply(tmp_path, stub_model) -> None:
+@pytest.mark.parametrize("suffix", [".pth", ".safetensors"])
+def test_pipeline_release_checkpoint_to_ply(tmp_path, stub_model, suffix) -> None:
     head = {
         k: v
         for k, v in stub_model.state_dict().items()
         if not k.startswith("fs_model.")
     }
     config = {k: v for k, v in MODEL_CONFIG.items() if k != "fs_checkpoint_path"}
-    ckpt = tmp_path / "release.pth"
-    torch.save({"version": 1, "config": config, "state_dict": head}, ckpt)
+    ckpt = tmp_path / f"release{suffix}"
+    save_release_checkpoint(ckpt, head, config)
 
     torch.manual_seed(1)
     backbone = StubBackbone().eval()

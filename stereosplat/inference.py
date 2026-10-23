@@ -33,7 +33,7 @@ from stereosplat.datasets.io_utils import (
     get_resize_crop_params,
     process_image,
 )
-from stereosplat.models.build import build_model, load_checkpoint
+from stereosplat.models.build import build_model, load_checkpoint, read_checkpoint
 from stereosplat.models.stereosplat import StereoSplat
 from stereosplat.rendering.gaussians import Gaussians
 from stereosplat.utils.training import get_transforms
@@ -246,7 +246,7 @@ def load_model_config(
     Release checkpoints carry their model config. For training checkpoints the
     ``model`` section (and ``max_depth``) of ``config_path`` is used.
     """
-    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    ckpt = read_checkpoint(checkpoint_path)
     if isinstance(ckpt, Mapping) and "config" in ckpt and config_path is None:
         return dict(ckpt["config"])
     if config_path is None:

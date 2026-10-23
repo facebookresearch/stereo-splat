@@ -15,7 +15,9 @@ Checkpoint formats accepted by :func:`load_checkpoint`:
   "state_dict": ...}`` holding the StereoSplat head plus the FoundationStereo
   BatchNorm buffers that differ from the public FoundationStereo weights; all
   other ``fs_model.*`` tensors come from the FoundationStereo checkpoint loaded
-  by :func:`build_model`.
+  by :func:`build_model`. Stored either as a ``.pth`` file (torch pickle) or as
+  a ``.safetensors`` file whose metadata holds ``version`` and the JSON-encoded
+  ``config`` (see :func:`save_release_checkpoint`).
 
 Key remap: the public module names are identical to the ones used to train the
 paper model, so :func:`remap_state_dict` only strips a DistributedDataParallel
@@ -24,6 +26,7 @@ paper model, so :func:`remap_state_dict` only strips a DistributedDataParallel
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from collections.abc import Mapping
@@ -159,6 +162,60 @@ def remap_state_dict(state_dict: Mapping[str, torch.Tensor]) -> dict[str, torch.
     return out
 
 
+def save_release_checkpoint(
+    path: str | os.PathLike[str],
+    state_dict: Mapping[str, torch.Tensor],
+    config: Mapping[str, Any],
+    version: int = 1,
+) -> None:
+    """Write a release checkpoint (``.safetensors`` or torch ``.pth``)."""
+    state = {k: v.detach().cpu().contiguous() for k, v in state_dict.items()}
+    if str(path).endswith(".safetensors"):
+        from safetensors.torch import save_file
+
+        metadata = {
+            "format": "pt",
+            "version": str(version),
+            "config": json.dumps(dict(config), sort_keys=True),
+        }
+        save_file(state, str(path), metadata=metadata)
+    else:
+        torch.save(
+            {"version": version, "config": dict(config), "state_dict": state}, path
+        )
+
+
+def read_checkpoint(
+    checkpoint_path: str | os.PathLike[str],
+    map_location: str | torch.device = "cpu",
+) -> dict[str, Any]:
+    """Read a checkpoint file without building a model.
+
+    ``.safetensors`` release files are returned in the same layout as ``.pth``
+    release checkpoints (``version``, ``config``, ``state_dict``). Pickled
+    checkpoints are read with the restricted unpickler (``weights_only=True``);
+    release and training checkpoints hold only tensors and plain containers.
+    """
+    if str(checkpoint_path).endswith(".safetensors"):
+        from safetensors import safe_open
+
+        device = str(map_location) if map_location is not None else "cpu"
+        with safe_open(str(checkpoint_path), framework="pt", device=device) as f:
+            metadata = f.metadata() or {}
+            state = {k: f.get_tensor(k) for k in f.keys()}
+        if "version" not in metadata or "config" not in metadata:
+            raise RuntimeError(
+                f"{checkpoint_path} is not a StereoSplat release checkpoint "
+                "(missing 'version'/'config' metadata)"
+            )
+        return {
+            "version": int(metadata["version"]),
+            "config": json.loads(metadata["config"]),
+            "state_dict": state,
+        }
+    return torch.load(checkpoint_path, map_location=map_location, weights_only=True)
+
+
 def load_checkpoint(
     model: StereoSplat,
     checkpoint_path: str,
@@ -170,9 +227,7 @@ def load_checkpoint(
     cover every non-backbone key; missing keys are allowed only under
     ``fs_model.`` (those weights come from the FoundationStereo checkpoint).
     """
-    # Release and training checkpoints hold only tensors and plain Python
-    # containers, so the restricted (safe) unpickler is sufficient.
-    ckpt = torch.load(checkpoint_path, map_location=map_location, weights_only=True)
+    ckpt = read_checkpoint(checkpoint_path, map_location=map_location)
     if "version" in ckpt:
         state = remap_state_dict(ckpt["state_dict"])
         missing, unexpected = model.load_state_dict(state, strict=False)
