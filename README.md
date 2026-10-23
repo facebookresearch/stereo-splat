@@ -5,10 +5,11 @@
 <!-- TODO(owner): paper, project page and Hugging Face links (placeholders below). -->
 [Paper](#) | [Project page](#) | [Model weights](https://huggingface.co/facebook/stereo-splat)
 
-<!-- TODO(owner): teaser figure (prefer a TartanAir v2 frame; KITTI imagery is non-commercial). -->
 <p align="center">
-  <img src="assets/teaser.png" alt="StereoSplat teaser" width="90%">
+  <img src="assets/teaser.png" alt="StereoSplat teaser: input left image, two rendered novel views and their depth maps" width="90%">
 </p>
+<p align="center"><sub>Single stereo pair from <a href="https://tartanair.org">TartanAir V2</a> (AbandonedFactory2) -> metric 3D Gaussians;
+novel views rendered 0.5 m to the side and 0.5 m forward. Produced with <code>scripts/demo.py</code>.</sub></p>
 
 StereoSplat reconstructs metric-scale 3D Gaussians from a short sequence of
 calibrated stereo pairs in a single feed-forward pass and renders novel views
