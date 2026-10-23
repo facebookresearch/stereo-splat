@@ -48,9 +48,10 @@ to them.
 
 ## Installation
 
-Tested on Linux with Python 3.10, PyTorch 2.4.1 and CUDA 12.1 (pinned versions
-in [`requirements.txt`](requirements.txt)). A CUDA GPU is required for
-training, evaluation and rendering in the demo.
+Tested on Linux with Python 3.10, PyTorch 2.4.1 / torchvision 0.19.1 (CUDA 12.1
+wheels), gsplat 1.4.0 and NVIDIA A100 GPUs (pinned versions in
+[`requirements.txt`](requirements.txt)). A CUDA GPU is required for training,
+evaluation and rendering in the demo.
 
 ```bash
 git clone --recursive https://github.com/facebookresearch/stereo-splat.git
@@ -68,9 +69,20 @@ A regular `pip install .` also works (the split files in `data/splits` are
 installed with the package); in that case set `FOUNDATION_STEREO_ROOT` (see
 below), since `third_party/` is not part of the installed package.
 
-`gsplat` compiles its CUDA kernels on first use; this needs a CUDA toolkit
-(`nvcc`) matching your PyTorch build. Alternatively install a prebuilt `gsplat`
-wheel matching your PyTorch/CUDA versions.
+`gsplat` 1.4.0 from PyPI compiles its CUDA kernels the first time it is used
+(a few minutes; the result is cached in `~/.cache/torch_extensions`). This
+needs a CUDA 12 toolkit: `nvcc` on `PATH` and `CUDA_HOME` pointing to a toolkit
+that includes the CUDA runtime headers, e.g.
+
+```bash
+export CUDA_HOME=/usr/local/cuda-12.1 PATH=/usr/local/cuda-12.1/bin:$PATH
+python -c "import torch, gsplat; print(gsplat.__version__)"
+```
+
+We tested the JIT build with `nvcc` 12.8 against the CUDA 12.1 PyTorch wheels.
+Set `TORCH_CUDA_ARCH_LIST` (e.g. `8.0` for A100) to compile only for your GPU.
+Alternatively, install a prebuilt `gsplat` 1.4.0 wheel matching your PyTorch
+and CUDA versions (see the [gsplat documentation](https://docs.gsplat.studio/)).
 
 Run the unit tests (CPU) with `pip install pytest && pytest tests`.
 
@@ -156,7 +168,9 @@ bash scripts/download_weights.sh        # into ${CKPT_ROOT:-checkpoints}
 ```
 
 The script downloads and verifies `stereosplat_v1.pth` from Hugging Face and
-prints instructions for the FoundationStereo weights.
+prints instructions for the FoundationStereo weights. The same weights are also
+provided as `stereosplat_v1.safetensors` (model config in the file metadata);
+`--checkpoint` accepts either file.
 TODO(owner): Hugging Face repo id, file name and sha256 in
 `scripts/download_weights.sh`.
 

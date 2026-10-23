@@ -21,6 +21,9 @@ HF_REPO_ID="facebook/stereo-splat"           # TODO(owner): final Hugging Face r
 HF_FILENAME="stereosplat_v1.pth"             # TODO(owner): final file name in that repo
 HF_REVISION="main"                           # TODO(owner): pin a commit/tag of the HF repo
 STEREOSPLAT_SHA256="TODO_OWNER_SHA256_OF_STEREOSPLAT_V1"  # TODO(owner): sha256 of the uploaded file
+# Expected sha256 of the current release candidate files (not yet uploaded):
+#   stereosplat_v1.pth          b09198de81734920ef2a304e8ee75b37f1863e371a6897458a04d95f57875ca6
+#   stereosplat_v1.safetensors  938543e69362555302099a31bdf28ad2740a65885a25e0df4e2a846ec876be4e
 # ---------------------------------------------------------------------------
 
 # Public FoundationStereo ViT-S "11-33-40" checkpoint (model_best_bp2.pth).

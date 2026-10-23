@@ -1,4 +1,5 @@
-# Tested with Python 3.10 and CUDA 12.1 wheels of torch 2.4.1.
+# Tested with Python 3.10, the CUDA 12.1 wheels of torch 2.4.1 / torchvision 0.19.1
+# and gsplat 1.4.0 (CUDA kernels JIT-compiled on first use; needs nvcc, see README).
 # For GPU training/evaluation install the matching CUDA build of torch first, e.g.
 #   pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
 torch==2.4.1
