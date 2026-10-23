@@ -58,7 +58,7 @@ def _fake_render(gaussians, extrinsics, intrinsics, image_shape, **_):
     return {
         "colors": color[:, None, :, None, None].expand(b, v, 3, h, w).contiguous(),
         "depths": depth[:, None, None, None].expand(b, v, h, w),
-        "alphas": torch.ones(b, v, h, w),
+        "alphas": torch.ones(b, v, h, w, device=color.device),
     }
 
 
@@ -155,7 +155,12 @@ def _final_params(path: Path) -> dict[str, torch.Tensor]:
 
 
 @pytest.mark.parametrize("grad_accum_steps", [1, 2])
-def test_resume_matches_uninterrupted_run(tmp_path, grad_accum_steps) -> None:
+def test_resume_matches_uninterrupted_run(
+    tmp_path, monkeypatch, grad_accum_steps
+) -> None:
+    # Exact equality needs deterministic kernels; the CUDA scatter_add_ used by
+    # the Gaussian aggregation is not, so always run this test on CPU.
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     data_root = tmp_path / "data"
     _write_scene(data_root / "scene")
 
