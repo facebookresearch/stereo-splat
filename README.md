@@ -221,10 +221,32 @@ python scripts/train.py --config configs/train_stereosplat.yaml \
 ```
 
 (or set `resume_from` in the config). Training restarts at the epoch after the
-one stored in the checkpoint and continues the LR schedule; with the same
-number of processes it reproduces the uninterrupted run. After training, the
-model is evaluated on the `test_datasets` of the config with ground-truth
-poses.
+one stored in the checkpoint (a partially finished epoch is redone) and
+continues the LR schedule, data order and global step. On GPU the resumed run
+is close to, but not bitwise identical with, the uninterrupted run because the
+Gaussian aggregation uses `scatter_add_`, which is nondeterministic on CUDA.
+After training, the model is evaluated on the `test_datasets` of the config
+with ground-truth poses (disable a dataset with e.g. `test_datasets.kitti=null`,
+or all of them with `test_datasets=null`).
+
+To check the setup on a small subset first, point the training datasets at
+one-line split files and shorten the schedule, e.g.:
+
+```bash
+torchrun --nproc_per_node=2 scripts/train.py --config configs/train_stereosplat.yaml \
+    --output-dir outputs/debug \
+    training_datasets.tartan.split_file_path=debug_splits/tartan.txt \
+    training_datasets.infinigen.split_file_path=debug_splits/infinigen.txt \
+    test_datasets=null optimization.epochs=5 optimization.lr=2e-4 \
+    optimization.min_lr=2e-6 optimization.log_every_n_steps=1 \
+    optimization.vis_every_n_steps=50
+```
+
+The LPIPS loss downloads the torchvision VGG16 ImageNet weights on first use
+(`~/.cache/torch/hub/checkpoints/vgg16-397923af.pth`). The comparison images
+written to TensorBoard are large (several MB each; one every
+`optimization.vis_every_n_steps` training steps plus up to 8 per validation and
+test pass), so raise `vis_every_n_steps` if the log directory grows too much.
 
 The recipe trains for 10 epochs at 320x640 with 3 stereo pairs per sample,
 AdamW (lr 1e-3, 1 linear warm-up epoch, cosine decay to 1e-5), an L1 + SSIM +
