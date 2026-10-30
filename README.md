@@ -54,8 +54,12 @@ wheels), gsplat 1.4.0 and NVIDIA A100 GPUs (pinned versions in
 rendering in the demo.
 
 ```bash
-git clone --recursive https://github.com/facebookresearch/stereo-splat.git
+git clone https://github.com/facebookresearch/stereo-splat.git
 cd stereo-splat
+
+# FoundationStereo (NVIDIA, installed separately; see below)
+git clone https://github.com/NVlabs/FoundationStereo third_party/FoundationStereo
+git -C third_party/FoundationStereo checkout 6e8806816b533e4d13ddbb95ffa907b797060a62
 
 conda create -n stereosplat python=3.10 -y
 conda activate stereosplat
@@ -88,19 +92,12 @@ Run the unit tests (CPU) with `pip install pytest && pytest tests`.
 
 ### FoundationStereo backbone
 
-StereoSplat uses the official, unmodified FoundationStereo code from a git
-submodule in `third_party/FoundationStereo` (see
-[`third_party/README.md`](third_party/README.md)). If you cloned without
-`--recursive`:
-
-```bash
-git submodule update --init --recursive
-```
-
-<!-- TODO(owner): add the submodule and record the pinned commit (needs GitHub access). -->
-
-To use a FoundationStereo checkout elsewhere, set
-`FOUNDATION_STEREO_ROOT=/path/to/FoundationStereo`. The DINOv2 code used inside
+StereoSplat uses the official, unmodified FoundationStereo code, which is
+not included in this repository and is released by NVIDIA under its own
+license. Clone it into `third_party/FoundationStereo` at commit
+`6e88068` as shown above (see
+[`third_party/README.md`](third_party/README.md)). To use a FoundationStereo
+checkout elsewhere, set `FOUNDATION_STEREO_ROOT=/path/to/FoundationStereo`. The DINOv2 code used inside
 FoundationStereo is fetched with `torch.hub` from
 [facebookresearch/dinov2](https://github.com/facebookresearch/dinov2) at the
 pinned commit `7764ea0f912e53c92e82eb78a2a1631e92725fc8` the first time the

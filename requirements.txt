@@ -20,5 +20,5 @@ tqdm>=4.66
 plyfile==1.1
 safetensors==0.8.0
 scipy>=1.14
-# Needed to import the upstream FoundationStereo sources (third_party/FoundationStereo).
+# Needed to import the upstream FoundationStereo sources (see third_party/README.md).
 huggingface_hub>=0.23

@@ -4,24 +4,18 @@
 
 StereoSplat uses the frozen FoundationStereo stereo network
 (https://github.com/NVlabs/FoundationStereo, NVIDIA Source Code License,
-non-commercial). Its source code is **not** included in this repository. It is
-expected as a git submodule at `third_party/FoundationStereo`:
-
-> **TODO(owner): pin FoundationStereo.** The commit below is a placeholder.
-> GitHub was not reachable when this export was prepared, so no submodule
-> (`.gitmodules`) and no commit SHA are recorded yet. Add the submodule at a
-> fixed NVlabs commit, replace `<pinned commit>` with its full SHA, and re-run
-> `pytest tests/test_foundation_stereo_adapter.py` with
-> `FOUNDATION_STEREO_ROOT` and `FOUNDATION_STEREO_CKPT_DIR` set (golden values).
-> The adapter was validated against a mirror of the upstream code
-> (huggingface.co/spaces/shriarul5273/FoundationStereo_demo, commit df3ea63).
+non-commercial). Its source code is **not** included in or hosted by this
+repository; install it yourself from the upstream repository at the commit the
+adapter was validated against:
 
 ```bash
-git submodule add https://github.com/NVlabs/FoundationStereo third_party/FoundationStereo
-git -C third_party/FoundationStereo checkout <pinned commit>  # TODO(owner)
+git clone https://github.com/NVlabs/FoundationStereo third_party/FoundationStereo
+git -C third_party/FoundationStereo checkout 6e8806816b533e4d13ddbb95ffa907b797060a62
 ```
 
-or anywhere else via `export FOUNDATION_STEREO_ROOT=/path/to/FoundationStereo`.
+`third_party/FoundationStereo` is the default location (it is listed in
+`.gitignore`); a checkout elsewhere can be used with
+`export FOUNDATION_STEREO_ROOT=/path/to/FoundationStereo`.
 `stereosplat/backbones/foundation_stereo.py` imports the upstream modules and
 adapts them at runtime (input normalization, feature taps, offline
 construction); see the module docstring. StereoSplat uses the public ViT-S

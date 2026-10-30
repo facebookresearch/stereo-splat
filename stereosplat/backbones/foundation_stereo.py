@@ -8,8 +8,9 @@
 
 FoundationStereo (https://github.com/NVlabs/FoundationStereo) is distributed
 under the NVIDIA Source Code License and is NOT vendored in this repository.
-Clone it into ``third_party/FoundationStereo`` (git submodule) or point the
-``FOUNDATION_STEREO_ROOT`` environment variable at a checkout. This module only
+Clone it (at the commit pinned in ``third_party/README.md``) into
+``third_party/FoundationStereo`` or point the ``FOUNDATION_STEREO_ROOT``
+environment variable at a checkout. This module only
 imports the upstream classes and wraps them; no upstream code is copied.
 
 StereoSplat needs a few behaviours that differ from the upstream defaults.
@@ -86,10 +87,10 @@ def _resolve_root(root: str | os.PathLike[str] | None) -> Path:
     path = Path(candidate) if candidate else DEFAULT_FOUNDATION_STEREO_ROOT
     if not (path / "core" / "foundation_stereo.py").is_file():
         raise ImportError(
-            f"FoundationStereo sources not found at {path}. Run "
-            "`git submodule update --init third_party/FoundationStereo` or set "
-            "FOUNDATION_STEREO_ROOT to a clone of "
-            "https://github.com/NVlabs/FoundationStereo."
+            f"FoundationStereo sources not found at {path}. Clone "
+            "https://github.com/NVlabs/FoundationStereo into "
+            "third_party/FoundationStereo (see third_party/README.md) or set "
+            "FOUNDATION_STEREO_ROOT to a clone."
         )
     return path.resolve()
 

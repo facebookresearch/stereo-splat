@@ -21,5 +21,7 @@ outputs/
 output/
 runs/
 checkpoints/
+# FoundationStereo is installed by the user, never committed (third_party/README.md).
+/third_party/FoundationStereo/
 /data/*
 !/data/splits/
