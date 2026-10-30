@@ -269,8 +269,8 @@ above.
 
 ## License
 
-StereoSplat is released under the CC BY-NC 4.0 license, see [LICENSE](LICENSE).
-TODO(owner): confirm against the approved release license.
+StereoSplat code and model weights are released under the CC BY-NC 4.0
+license, see [LICENSE](LICENSE).
 
 Third-party components keep their own licenses:
 
