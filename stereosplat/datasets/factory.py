@@ -7,8 +7,8 @@
 """
 Dataset factory for creating dataset instances.
 
-Supports TartanAir (v1, training), TartanAir V2, Infinigen, KITTI and
-Virtual KITTI 2, all read from the processed per-frame layout on local disk.
+Supports TartanAir V2, Infinigen and KITTI, all read from the processed
+per-frame layout on local disk.
 """
 
 from __future__ import annotations
@@ -23,9 +23,7 @@ from torch.utils.data import Dataset
 
 from stereosplat.datasets.infinigen import InfinigenDataset
 from stereosplat.datasets.kitti import KITTIDataset
-from stereosplat.datasets.tartan import TartanAirDataset
 from stereosplat.datasets.tartanv2 import TartanAirV2Dataset
-from stereosplat.datasets.vkitti2 import VKITTI2Dataset
 
 if TYPE_CHECKING:
     from importlib.abc import Traversable
@@ -85,19 +83,13 @@ def get_dataset(
     dataset_config: dict[str, Any],
     transforms: Callable,
     scene_names: list[str] | None = None,
-) -> (
-    TartanAirDataset
-    | TartanAirV2Dataset
-    | InfinigenDataset
-    | KITTIDataset
-    | VKITTI2Dataset
-):
+) -> TartanAirV2Dataset | InfinigenDataset | KITTIDataset:
     """
     Factory function to create dataset instances.
 
     Args:
         dataset_name: Name of the dataset to create
-            ("tartan", "tartanv2", "infinigen", "kitti", "vkitti2")
+            ("tartanv2", "infinigen", "kitti")
         dataset_config: Configuration dictionary containing:
             - dataset_path: Local path to the processed dataset
             - split_file_path: Path to file listing scene names (one per line)
@@ -136,11 +128,9 @@ def get_dataset(
             scene_names = []
 
     dataset_classes = {
-        "tartan": TartanAirDataset,
         "tartanv2": TartanAirV2Dataset,
         "infinigen": InfinigenDataset,
         "kitti": KITTIDataset,
-        "vkitti2": VKITTI2Dataset,
     }
 
     if dataset_name not in dataset_classes:

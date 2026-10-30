@@ -49,5 +49,6 @@ on PyPI).
 ## Python dependencies
 
 Installed from PyPI (see `requirements.txt`), not redistributed: gsplat
-(Apache-2.0), LPIPS (BSD-2-Clause), torchmetrics (Apache-2.0), pytorch-msssim
-(MIT), e3nn (MIT), timm (Apache-2.0), einops (MIT), OmegaConf (BSD-3-Clause).
+(Apache-2.0), torchmetrics (Apache-2.0; its LPIPS metric ships the LPIPS
+weights, BSD-2-Clause), pytorch-msssim (MIT), e3nn (MIT), timm (Apache-2.0),
+einops (MIT), OmegaConf (BSD-3-Clause).

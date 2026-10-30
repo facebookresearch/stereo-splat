@@ -36,7 +36,7 @@ from stereosplat.datasets.io_utils import (
 from stereosplat.models.build import build_model, load_checkpoint, read_checkpoint
 from stereosplat.models.stereosplat import StereoSplat
 from stereosplat.rendering.gaussians import Gaussians
-from stereosplat.utils.training import get_transforms
+from stereosplat.utils.preprocessing import get_transforms
 
 IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".bmp")
 DEFAULT_IMG_SIZE: tuple[int, int] = (320, 640)

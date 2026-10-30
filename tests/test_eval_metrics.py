@@ -17,7 +17,6 @@ from stereosplat.evaluation.external_poses import (
     align_depth_scale,
     replace_poses_in_batch,
 )
-from stereosplat.losses.rendering_losses import ssim
 from stereosplat.utils.batch import prepare_input_output_data
 
 
@@ -51,12 +50,6 @@ def test_msssim_identical_images() -> None:
     ev = RenderingEvaluator(device="cpu")
     x = torch.rand(1, 3, 192, 192)
     assert math.isclose(ev.compute_msssim(x, x).item(), 1.0, rel_tol=1e-5)
-
-
-def test_ssim_loss() -> None:
-    x = torch.rand(2, 3, 32, 32)
-    assert math.isclose(ssim(x, x).item(), 1.0, rel_tol=1e-5)
-    assert ssim(x, torch.rand(2, 3, 32, 32)).item() < 0.5
 
 
 def test_eval_sampler_covers_dataset_once() -> None:

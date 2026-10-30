@@ -9,13 +9,12 @@ for downloading the raw data yourself.
 
 | Dataset | Used for | Script | Processed root expected by the configs |
 |---|---|---|---|
-| TartanAir (v1) | training | `tartan.py` | `${DATA_ROOT}/tartanair_processed` |
-| Infinigen stereo video (InfinigenSV) | training + evaluation | `infinigen.py` | `${DATA_ROOT}/infinigen_processed` |
+| Infinigen stereo video (InfinigenSV) | evaluation | `infinigen.py` | `${DATA_ROOT}/infinigen_processed` |
 | TartanAir v2 | evaluation | `tartanv2.py` | `${DATA_ROOT}/tartanair_v2_processed` |
 | KITTI Visual Odometry | evaluation (zero-shot) | `kitti.py` | `${DATA_ROOT}/kitti_static` |
 
 These folder names are the `dataset_path` values used by
-`configs/train_stereosplat.yaml` and `configs/eval_*.yaml`; if you use other
+`configs/eval_*.yaml`; if you use other
 locations, override them on the command line, e.g.
 `test_datasets.kitti.dataset_path=/other/kitti_static`.
 
@@ -31,66 +30,6 @@ counts of images, depth maps and poses differ). Every script accepts
 used by a split.
 
 ---
-
-## TartanAir v1 (training)
-
-Source: https://theairlab.org/tartanair-dataset/ , mirrored on Hugging Face as
-[`theairlabcmu/tartanair`](https://huggingface.co/datasets/theairlabcmu/tartanair).
-Only the left/right image and depth archives are needed (about 0.42 TB for all 18
-environments; flow and segmentation archives are not used).
-
-```bash
-huggingface-cli download theairlabcmu/tartanair --repo-type dataset \
-    --local-dir /data/raw/tartanair \
-    --include "*/Easy/image_left.zip" "*/Easy/image_right.zip" \
-              "*/Easy/depth_left.zip" "*/Easy/depth_right.zip" \
-              "*/Hard/image_left.zip" "*/Hard/image_right.zip" \
-              "*/Hard/depth_left.zip" "*/Hard/depth_right.zip"
-```
-
-Expected raw tree (zips are read directly, no need to extract):
-
-```
-/data/raw/tartanair/
-  abandonedfactory/
-    Easy/{image_left,image_right,depth_left,depth_right}.zip
-    Hard/{image_left,image_right,depth_left,depth_right}.zip
-  abandonedfactory_night/
-  ...
-```
-
-Convert:
-
-```bash
-python scripts/prepare_data/tartan.py \
-    --input-dir /data/raw/tartanair \
-    --output-dir ${DATA_ROOT}/tartanair_processed \
-    --split-file data/splits/tartan/train.txt --workers 8
-```
-
-`data/splits/tartan/train.txt` lists all 369 TartanAir v1 trajectories (the
-validation set used during training is a random 10% split of the training
-mixture). Training samples every 5th frame (`stride: 5` in the config).
-
-Result:
-
-```
-tartanair_processed/
-  abandonedfactory_Easy_P000/
-    rgb_left/000000.png ...          640x480 RGB
-    rgb_right/000000.png ...
-    depth_left/000000.npy ...        (480, 640) float32, meters
-    depth_right/000000.npy ...
-    poses_left.npy                   (N, 4, 4) float32 camera-to-world, OpenCV axes
-    poses_right.npy
-    intrinsics_left.npy              (3, 3) float32 (fx = fy = 320, cx = 320, cy = 240)
-    intrinsics_right.npy
-```
-
-Poses: TartanAir stores `tx ty tz qx qy qz qw` in a NED world frame with an
-x-forward camera; the script converts both frames to the OpenCV convention
-(x right, y down, z forward), so the right camera sits at +0.25 m along the left
-camera's x axis.
 
 ## TartanAir v2 (evaluation)
 
@@ -202,18 +141,17 @@ kitti_static/
 
 `--mode full` writes whole sequences (`00/`, `01/`, ...) without depth instead.
 
-## Infinigen stereo video (training + evaluation)
+## Infinigen stereo video (evaluation)
 
 The Infinigen scenes used in the paper are the stereo video sequences of
 InfinigenSV, rendered with [Infinigen](https://github.com/princeton-vl/infinigen)
 and released on Hugging Face as
 [`MatchLab/Infinigen`](https://huggingface.co/datasets/MatchLab/Infinigen)
 (Jing et al., "Match Stereo Videos via Bidirectional Alignment"). Our
-`infinigen_static` split uses 35 training scenes (from the InfinigenSV `train`
-and `val` folders) and 9 test scenes (from `test`).
+`infinigen_static` test split uses 9 scenes from the InfinigenSV `test` folder.
 
 TODO(owner): confirm that the released numbers should reference the public
-InfinigenSV scenes (scene IDs in `data/splits/infinigen_static/*.txt` match
+InfinigenSV scenes (scene IDs in `data/splits/infinigen_static/test.txt` match
 InfinigenSV) rather than a separate data release.
 
 Only the PNG images, `.npy` depth maps and `.npz` camera files are needed (skip
@@ -226,7 +164,6 @@ for s in $(cat data/splits/infinigen_static/test.txt); do
       --include "test/$s/frames/Image/*/*.png" "test/$s/frames/Depth/*/*.npy" \
                 "test/$s/frames/camview/*/*.npz"
 done
-# Training scenes live under train/ and val/ (use the same patterns).
 ```
 
 Expected raw tree (standard Infinigen frame export; scene folders are found at
@@ -239,8 +176,6 @@ any depth below `--input-dir`):
     Image/camera_1/Image_0_0_0001_1.png ...     right
     Depth/camera_{0,1}/Depth_0_0_0001_*.npy ...
     camview/camera_{0,1}/camview_0_0_0001_*.npz ...   'T' (camera-to-world, Blender axes), 'K'
-  train/...
-  val/...
 ```
 
 Convert:
@@ -250,7 +185,6 @@ python scripts/prepare_data/infinigen.py \
     --input-dir /data/raw/InfinigenSV \
     --output-dir ${DATA_ROOT}/infinigen_processed \
     --split-file data/splits/infinigen_static/test.txt
-# and again with data/splits/infinigen_static/train.txt for training
 ```
 
 Result:
@@ -280,7 +214,7 @@ The scripts are released under this repository's license. The datasets are
 
 | Dataset | License (as stated by the providers) |
 |---|---|
-| TartanAir v1 / v2 | CC BY 4.0 on the project website; the Hugging Face mirrors are tagged BSD-3-Clause. TODO(owner): confirm. |
+| TartanAir v2 | CC BY 4.0 on the project website; the Hugging Face mirrors are tagged BSD-3-Clause. TODO(owner): confirm. |
 | KITTI Visual Odometry | Creative Commons Attribution-NonCommercial-ShareAlike 3.0 (CC BY-NC-SA 3.0). Non-commercial use only; data derived from KITTI must be shared under the same license. |
 | InfinigenSV (`MatchLab/Infinigen`) | Creative Commons Attribution-NonCommercial-ShareAlike 4.0 (CC BY-NC-SA 4.0). Infinigen code: BSD-3-Clause. |
 

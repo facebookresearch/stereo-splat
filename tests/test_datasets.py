@@ -12,11 +12,9 @@ import pytest
 from stereosplat.datasets.factory import check_dataset_not_empty, get_dataset
 
 POSE_FILES = {
-    "tartan": "poses_left.npy",
     "tartanv2": "poses_lcam_front.npy",
     "infinigen": "poses_left.npy",
     "kitti": "poses_left.npy",
-    "vkitti2": "poses_left.npy",
 }
 
 

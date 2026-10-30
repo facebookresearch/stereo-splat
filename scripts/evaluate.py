@@ -60,7 +60,7 @@ from stereosplat.utils.distributed import (
     setup_distributed,
     setup_logging,
 )
-from stereosplat.utils.training import get_transforms
+from stereosplat.utils.preprocessing import get_transforms
 from stereosplat.utils.visualization import visualize_sample
 
 LOG_EVERY_PERCENTAGE = 2

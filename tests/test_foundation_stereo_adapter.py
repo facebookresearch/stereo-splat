@@ -150,7 +150,7 @@ GOLDEN = {
 
 def _golden_pair() -> tuple[torch.Tensor, torch.Tensor]:
     """Smooth random texture; the right view is shifted by 8 px (disparity 8)."""
-    from stereosplat.utils.training import get_transforms
+    from stereosplat.utils.preprocessing import get_transforms
 
     g = torch.Generator().manual_seed(0)
     tex = torch.rand(1, 3, 16, 36, generator=g)

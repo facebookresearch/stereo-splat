@@ -4,7 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Batch preparation shared by training and evaluation."""
+"""Batch preparation for evaluation."""
 
 from __future__ import annotations
 

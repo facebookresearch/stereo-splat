@@ -16,7 +16,7 @@ StereoSplat needs a few behaviours that differ from the upstream defaults.
 They are all applied from the outside:
 
 * Input normalization: StereoSplat feeds images that are already normalized
-  with the dataset statistics (``stereosplat.utils.training.get_transforms``),
+  with the dataset statistics (``stereosplat.utils.preprocessing.get_transforms``),
   so the upstream ``normalize_image`` call inside ``forward`` is replaced by the
   identity for the duration of our forward pass.
 * Feature taps: StereoSplat consumes the 1/2-resolution stem features and the

@@ -40,7 +40,6 @@ to them.
 - [Installation](#installation)
 - [Data](#data)
 - [Pretrained weights](#pretrained-weights)
-- [Training](#training)
 - [Evaluation](#evaluation)
 - [Demo](#demo)
 - [Citation](#citation)
@@ -51,8 +50,8 @@ to them.
 
 Tested on Linux with Python 3.10, PyTorch 2.4.1 / torchvision 0.19.1 (CUDA 12.1
 wheels), gsplat 1.4.0 and NVIDIA A100 GPUs (pinned versions in
-[`requirements.txt`](requirements.txt)). A CUDA GPU is required for training,
-evaluation and rendering in the demo.
+[`requirements.txt`](requirements.txt)). A CUDA GPU is required for evaluation and
+rendering in the demo.
 
 ```bash
 git clone --recursive https://github.com/facebookresearch/stereo-splat.git
@@ -119,8 +118,8 @@ export DATA_ROOT=/path/to/processed_datasets   # see "Data"
 export CKPT_ROOT=$PWD/checkpoints              # see "Pretrained weights"
 ```
 
-Training and evaluation stop with an error if a scene listed in a split file
-is missing under `DATA_ROOT` or a dataset ends up empty, and log the number of
+Evaluation stops with an error if a scene listed in a split file is
+missing under `DATA_ROOT` or a dataset ends up empty, and logs the number of
 scenes and windows per dataset at startup. To run on a deliberately partial
 copy of the data, set `allow_missing_scenes: true` (globally or per dataset) or
 pass `--allow-missing-scenes`.
@@ -133,8 +132,7 @@ expect the processed datasets in the following folders:
 
 ```
 ${DATA_ROOT}/
-  tartanair_processed/        TartanAir (v1), training
-  infinigen_processed/        Infinigen stereo video (InfinigenSV), training + evaluation
+  infinigen_processed/        Infinigen stereo video (InfinigenSV), evaluation
   tartanair_v2_processed/     TartanAir v2, evaluation
   kitti_static/               KITTI Visual Odometry static segments, zero-shot evaluation
   macvo_poses/                optional, external poses for evaluation (docs/macvo_poses.md)
@@ -142,12 +140,11 @@ ${DATA_ROOT}/
 
 | Dataset | Role | Split files |
 |---|---|---|
-| TartanAir (v1) | training | `data/splits/tartan/train.txt` |
-| Infinigen stereo video (InfinigenSV) | training + evaluation | `data/splits/infinigen_static/{train,test}.txt` |
+| Infinigen stereo video (InfinigenSV) | evaluation | `data/splits/infinigen_static/test.txt` |
 | TartanAir v2 | evaluation | `data/splits/tartanv2/test.txt` |
 | KITTI Visual Odometry (static segments) | zero-shot evaluation | `data/splits/kitti_static/test.txt` |
 
-The Infinigen training and test scenes are the stereo video sequences of the
+The Infinigen test scenes are stereo video sequences of the
 public Hugging Face dataset
 [`MatchLab/Infinigen`](https://huggingface.co/datasets/MatchLab/Infinigen)
 (InfinigenSV, CC BY-NC-SA 4.0).
@@ -162,7 +159,7 @@ directory first and then the repository root.
 The released checkpoint contains the StereoSplat decoder (plus the few
 FoundationStereo BatchNorm statistics that differ from the public
 FoundationStereo weights); all other FoundationStereo weights are loaded from
-NVIDIA's release.
+NVIDIA's release. The training code is not part of this release.
 
 ```bash
 bash scripts/download_weights.sh        # into ${CKPT_ROOT:-checkpoints}
@@ -189,84 +186,6 @@ ${CKPT_ROOT}/
 
 The configs point to this folder with
 `model.fs_checkpoint_path: ${oc.env:CKPT_ROOT}/foundation_stereo/11-33-40`.
-
-## Training
-
-```bash
-# 8 GPUs on one node
-torchrun --nproc_per_node=8 scripts/train.py --config configs/train_stereosplat.yaml \
-    --output-dir outputs/stereosplat
-
-# single GPU
-python scripts/train.py --config configs/train_stereosplat.yaml
-```
-
-Options: `--output-dir` (default `logging.output_dir` in the config),
-`--batch-size` (per GPU), `--num-views` (stereo pairs per sample) and OmegaConf
-dot-list overrides, e.g. `optimization.epochs=2 optimization.lr=5e-4`. To
-initialize the model from a checkpoint (release or training format) add
-`init_checkpoint_path=/path/to/checkpoint` (weights only). Multi-node
-training works with the usual `torchrun` arguments (`--nnodes`, `--node_rank`,
-`--rdzv_endpoint`, ...).
-
-The output directory contains `config.yaml`, TensorBoard logs
-(`tensorboard/`), `checkpoints/last_checkpoint.pt` (written after every epoch)
-and `checkpoints/best_checkpoint.pt` (best validation NVS PSNR). Both store the
-model, optimizer and LR-scheduler state, epoch, global step, best metric and
-RNG states. To continue an interrupted run with the same config:
-
-```bash
-python scripts/train.py --config configs/train_stereosplat.yaml \
-    --resume outputs/stereosplat/checkpoints/last_checkpoint.pt
-```
-
-(or set `resume_from` in the config). Training restarts at the epoch after the
-one stored in the checkpoint (a partially finished epoch is redone) and
-continues the LR schedule, data order and global step. On GPU the resumed run
-is close to, but not bitwise identical with, the uninterrupted run because the
-Gaussian aggregation uses `scatter_add_`, which is nondeterministic on CUDA.
-After training, the model is evaluated on the `test_datasets` of the config
-with ground-truth poses (disable a dataset with e.g. `test_datasets.kitti=null`,
-or all of them with `test_datasets=null`).
-
-To check the setup on a small subset first, point the training datasets at
-one-line split files and shorten the schedule, e.g.:
-
-```bash
-torchrun --nproc_per_node=2 scripts/train.py --config configs/train_stereosplat.yaml \
-    --output-dir outputs/debug \
-    training_datasets.tartan.split_file_path=debug_splits/tartan.txt \
-    training_datasets.infinigen.split_file_path=debug_splits/infinigen.txt \
-    test_datasets=null optimization.epochs=5 optimization.lr=2e-4 \
-    optimization.min_lr=2e-6 optimization.log_every_n_steps=1 \
-    optimization.vis_every_n_steps=50
-```
-
-The LPIPS loss downloads the torchvision VGG16 ImageNet weights on first use
-(`~/.cache/torch/hub/checkpoints/vgg16-397923af.pth`). The comparison images
-written to TensorBoard are large (several MB each; one every
-`optimization.vis_every_n_steps` training steps plus up to 8 per validation and
-test pass), so raise `vis_every_n_steps` if the log directory grows too much.
-
-The recipe trains for 10 epochs at 320x640 with 3 stereo pairs per sample,
-AdamW (lr 1e-3, 1 linear warm-up epoch, cosine decay to 1e-5), an L1 + SSIM +
-LPIPS rendering loss and a depth loss. The validation set is a random 10% of
-the training mixture.
-
-Batch size and learning rate: the paper model was trained on 80 GPUs with
-batch size 1 per GPU (effective batch size 80), and the LR schedule is defined
-per epoch. With fewer GPUs each epoch has more, smaller optimizer steps at the
-same peak LR. Two common ways to stay close to the paper setting are (a) keep
-the effective batch size with gradient accumulation, e.g. 8 GPUs with
-`optimization.grad_accum_steps=10`, or (b) scale `optimization.lr` (and
-`min_lr`) linearly with the effective batch size, e.g. 8 GPUs x batch 1 with
-`lr=1e-4`. Neither was used for the paper model; results with other settings
-may differ.
-
-Training data: the released weights were trained on TartanAir, Infinigen and
-an additional dataset that is not publicly available. The provided config
-trains on the public TartanAir (v1) and Infinigen training sets only, so a
-model trained with it is not expected to match the released weights exactly.
 
 ## Evaluation
 

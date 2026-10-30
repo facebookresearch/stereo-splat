@@ -18,8 +18,6 @@ MODULES = [
     "stereosplat.evaluation.eval_sampler",
     "stereosplat.evaluation.evaluator",
     "stereosplat.evaluation.external_poses",
-    "stereosplat.losses.factory",
-    "stereosplat.losses.rendering_losses",
     "stereosplat.models.aggregation",
     "stereosplat.models.build",
     "stereosplat.models.cross_view_attention",
@@ -31,8 +29,8 @@ MODULES = [
     "stereosplat.utils.batch",
     "stereosplat.utils.distributed",
     "stereosplat.utils.geometry",
+    "stereosplat.utils.preprocessing",
     "stereosplat.utils.sh",
-    "stereosplat.utils.training",
     "stereosplat.utils.visualization",
 ]
 
@@ -40,11 +38,3 @@ MODULES = [
 @pytest.mark.parametrize("name", MODULES)
 def test_import(name: str) -> None:
     importlib.import_module(name)
-
-
-def test_evaluation_does_not_import_training_code() -> None:
-    from pathlib import Path
-
-    src = (Path(__file__).resolve().parents[1] / "scripts" / "evaluate.py").read_text()
-    assert "import train" not in src and "from train" not in src
-    assert "stereosplat.losses" not in src
