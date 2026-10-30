@@ -23,17 +23,28 @@ the model can be used with poses from a stereo visual odometry system
 
 ## Results
 
-Depth accuracy (delta1, %) of rendered novel views. StereoSplat uses MAC-VO
-visual-odometry poses; the baselines use ground-truth poses.
+Novel view synthesis with the released weights and MAC-VO visual-odometry
+poses (paper protocol: windows of 3 stereo pairs, the middle pair is rendered;
+see [Evaluation](#evaluation)). These numbers were produced with this
+repository and match Table 1 of the paper after rounding.
+
+| Benchmark | PSNR | SSIM | LPIPS | AbsRel | delta1 (%) |
+|---|---|---|---|---|---|
+| Infinigen | 29.41 | 0.954 | 0.116 | 0.033 | 98.56 |
+| TartanAir v2 | 26.25 | 0.944 | 0.101 | 0.058 | 94.95 |
+| KITTI (zero-shot) | 25.20 | 0.941 | 0.101 | 0.044 | 95.98 |
+
+SSIM is multi-scale SSIM (`sssim` in `metrics.json`); AbsRel and delta1 are
+computed on the rendered depth of the novel view.
+
+Depth accuracy (delta1, %) compared with feed-forward baselines, which use
+ground-truth poses:
 
 | Benchmark | StereoSplat | DepthSplat | pixelSplat |
 |---|---|---|---|
 | Infinigen | 98.6 | 63.0 | 40.1 |
 | TartanAir v2 | 94.9 | 78.7 | - |
 | KITTI (zero-shot) | 96.0 | 79.8 | - |
-
-TODO(owner): add PSNR / SSIM / LPIPS / AbsRel from the paper tables, or link
-to them.
 
 ## Contents
 
