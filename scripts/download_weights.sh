@@ -22,8 +22,8 @@ HF_FILENAME="stereosplat_v1.pth"             # TODO(owner): final file name in t
 HF_REVISION="main"                           # TODO(owner): pin a commit/tag of the HF repo
 STEREOSPLAT_SHA256="TODO_OWNER_SHA256_OF_STEREOSPLAT_V1"  # TODO(owner): sha256 of the uploaded file
 # Expected sha256 of the current release candidate files (not yet uploaded):
-#   stereosplat_v1.pth          6a153fbe29ed77fa06c733bd456bd1f2bbc108c77f880f72bd97c00082bfe79d
-#   stereosplat_v1.safetensors  c914ca9435b2c07a4b6aff5530ea9b43ec63ada9dd86cafe95cddaf8a418f2e8
+#   stereosplat_v1.pth          3be31e9a9eefffd50a9957ed3b86e471eaa5f13e57085c51b5c8825342665043
+#   stereosplat_v1.safetensors  e84556050f65b28367a6bab67606d742db7b4881aa202582d687ad560260184f
 # ---------------------------------------------------------------------------
 
 # Public FoundationStereo ViT-S "11-33-40" checkpoint (model_best_bp2.pth).

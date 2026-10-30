@@ -131,6 +131,14 @@ def test_checkpoint_roundtrip(tmp_path, stub_model) -> None:
     with pytest.raises(RuntimeError):
         load_checkpoint(model, str(release))
 
+    # Release checkpoints must not carry FoundationStereo tensors.
+    with_backbone = dict(stub_model.state_dict())
+    torch.save(
+        {"version": 1, "config": MODEL_CONFIG, "state_dict": with_backbone}, release
+    )
+    with pytest.raises(RuntimeError, match="FoundationStereo"):
+        load_checkpoint(model, str(release))
+
 
 def test_safetensors_release_checkpoint(tmp_path, stub_model) -> None:
     head = {
@@ -160,6 +168,9 @@ def test_safetensors_release_checkpoint(tmp_path, stub_model) -> None:
     save_release_checkpoint(path, bad, config)
     with pytest.raises(RuntimeError):
         load_checkpoint(model, str(path))
+
+    with pytest.raises(ValueError, match="FoundationStereo"):
+        save_release_checkpoint(path, stub_model.state_dict(), config)
 
     from safetensors.torch import save_file
 

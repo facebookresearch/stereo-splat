@@ -12,10 +12,10 @@ Checkpoint formats accepted by :func:`load_checkpoint`:
   ``{"model_state_dict": ..., "optimizer_state_dict": ..., "epoch": ...}``.
   The state dict contains the frozen backbone under ``fs_model.*``.
 * Release checkpoints (``version`` key): ``{"version": 1, "config": {...},
-  "state_dict": ...}`` holding the StereoSplat head plus the FoundationStereo
-  BatchNorm buffers that differ from the public FoundationStereo weights; all
-  other ``fs_model.*`` tensors come from the FoundationStereo checkpoint loaded
-  by :func:`build_model`. Stored either as a ``.pth`` file (torch pickle) or as
+  "state_dict": ...}`` holding only the StereoSplat weights (no ``fs_model.*``
+  tensors). The frozen FoundationStereo backbone is not redistributed; all its
+  tensors come from NVIDIA's FoundationStereo checkpoint loaded by
+  :func:`build_model`. Stored either as a ``.pth`` file (torch pickle) or as
   a ``.safetensors`` file whose metadata holds ``version`` and the JSON-encoded
   ``config`` (see :func:`save_release_checkpoint`).
 
@@ -43,6 +43,9 @@ from stereosplat.models.stereosplat import StereoSplat
 logger: logging.Logger = logging.getLogger(__name__)
 
 MODEL_NAMES: frozenset[str] = frozenset({"stereosplat"})
+
+# State-dict prefix of the frozen FoundationStereo backbone.
+BACKBONE_PREFIX: str = "fs_model."
 
 # Old prefix -> new prefix. Empty: module names are unchanged.
 KEY_REMAP: dict[str, str] = {}
@@ -177,7 +180,18 @@ def save_release_checkpoint(
     config: Mapping[str, Any],
     version: int = 1,
 ) -> None:
-    """Write a release checkpoint (``.safetensors`` or torch ``.pth``)."""
+    """Write a release checkpoint (``.safetensors`` or torch ``.pth``).
+
+    Release checkpoints hold only the StereoSplat weights; FoundationStereo
+    (``fs_model.*``) tensors are rejected because they are loaded from NVIDIA's
+    checkpoint instead of being redistributed.
+    """
+    backbone_keys = [k for k in state_dict if k.startswith(BACKBONE_PREFIX)]
+    if backbone_keys:
+        raise ValueError(
+            f"Release checkpoints must not contain FoundationStereo tensors; got "
+            f"{len(backbone_keys)} '{BACKBONE_PREFIX}*' keys, e.g. {backbone_keys[:3]}"
+        )
     state = {k: v.detach().cpu().contiguous() for k, v in state_dict.items()}
     if str(path).endswith(".safetensors"):
         from safetensors.torch import save_file
@@ -233,14 +247,21 @@ def load_checkpoint(
     """Load StereoSplat weights; returns the checkpoint metadata.
 
     Full checkpoints are loaded with ``strict=True``. Release checkpoints must
-    cover every non-backbone key; missing keys are allowed only under
-    ``fs_model.`` (those weights come from the FoundationStereo checkpoint).
+    cover every non-backbone key and must not contain ``fs_model.*`` tensors
+    (the backbone weights come from the FoundationStereo checkpoint).
     """
     ckpt = read_checkpoint(checkpoint_path, map_location=map_location)
     if "version" in ckpt:
         state = remap_state_dict(ckpt["state_dict"])
+        backbone_keys = [k for k in state if k.startswith(BACKBONE_PREFIX)]
+        if backbone_keys:
+            raise RuntimeError(
+                f"Release checkpoint {checkpoint_path} contains FoundationStereo "
+                f"tensors ({backbone_keys[:3]}); release checkpoints hold only the "
+                "StereoSplat weights."
+            )
         missing, unexpected = model.load_state_dict(state, strict=False)
-        bad_missing = [k for k in missing if not k.startswith("fs_model.")]
+        bad_missing = [k for k in missing if not k.startswith(BACKBONE_PREFIX)]
         if bad_missing or unexpected:
             raise RuntimeError(
                 f"Checkpoint {checkpoint_path} does not match StereoSplat: "

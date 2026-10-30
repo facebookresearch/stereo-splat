@@ -177,10 +177,10 @@ on a deliberately partial copy of the data, set `allow_missing_scenes: true`
 <details>
 <summary><b>Checkpoints</b></summary>
 
-The released checkpoint holds the StereoSplat decoder, plus the few
-FoundationStereo BatchNorm statistics that differ from the public
-FoundationStereo weights. All other FoundationStereo weights are loaded from
-NVIDIA's release. The training code is not part of this release.
+The released checkpoint holds only the StereoSplat weights (decoder,
+cross-view attention and aggregation). FoundationStereo stays frozen in
+StereoSplat, so its weights are not redistributed: they are loaded from NVIDIA's
+release. The training code is not part of this release.
 
 ```
 bash scripts/download_weights.sh        # into ${CKPT_ROOT:-checkpoints}
