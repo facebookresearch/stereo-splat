@@ -15,7 +15,7 @@ omegaconf==2.2.3
 torchmetrics==1.2.1
 opencv-python-headless==4.10.0.84
 pillow>=10.0
-matplotlib==3.9.2
+matplotlib==3.10.9
 tensorboard==2.18.0
 tqdm>=4.66
 plyfile==1.1
