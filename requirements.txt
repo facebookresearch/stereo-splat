@@ -18,7 +18,7 @@ pillow>=10.0
 matplotlib==3.9.2
 tensorboard==2.18.0
 tqdm>=4.66
-plyfile==1.1
+plyfile==1.1.5
 safetensors==0.8.0
 scipy>=1.14
 # Needed to import the upstream FoundationStereo sources (see third_party/README.md).
