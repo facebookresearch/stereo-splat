@@ -11,7 +11,7 @@ timm==0.6.13
 pytorch-msssim==0.2.1
 e3nn==0.5.1
 einops==0.8.2
-omegaconf==2.2.3
+omegaconf==2.4.0
 torchmetrics==1.2.1
 opencv-python-headless==4.10.0.84
 pillow>=10.0
