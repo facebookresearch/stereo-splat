@@ -90,10 +90,11 @@ conda create -n stereosplat python=3.10 -y
 conda activate stereosplat
 ```
 
-Install PyTorch. We tested with the CUDA 12.1 build:
+Install PyTorch. We tested with the CUDA 13.0 build, which needs an NVIDIA
+driver that supports CUDA 13.0 (R580 or newer):
 
 ```
-pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
+pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cu130
 ```
 
 Install the other dependencies and the package:
@@ -109,15 +110,16 @@ because `third_party/` is not part of the installed package.
 
 `gsplat` 1.4.0 from PyPI compiles its CUDA kernels the first time it is used.
 This takes a few minutes, and the result is cached in
-`~/.cache/torch_extensions`. It needs a CUDA 12 toolkit: `nvcc` on `PATH` and
+`~/.cache/torch_extensions`. It needs a CUDA toolkit of the same major version
+as your PyTorch build (CUDA 13 for the wheels above): `nvcc` on `PATH` and
 `CUDA_HOME` pointing to a toolkit that includes the CUDA runtime headers:
 
 ```
-export CUDA_HOME=/usr/local/cuda-12.1 PATH=/usr/local/cuda-12.1/bin:$PATH
+export CUDA_HOME=/usr/local/cuda-13.0 PATH=/usr/local/cuda-13.0/bin:$PATH
 python -c "import torch, gsplat; print(gsplat.__version__)"
 ```
 
-We tested the build with `nvcc` 12.8 against the CUDA 12.1 PyTorch wheels. Set
+We tested the build with `nvcc` 13.0 against the CUDA 13.0 PyTorch wheels. Set
 `TORCH_CUDA_ARCH_LIST` (e.g. `8.0` for A100) to compile only for your GPU. You
 can also install a prebuilt `gsplat` 1.4.0 wheel that matches your PyTorch and
 CUDA versions (see the [gsplat documentation](https://docs.gsplat.studio/)).
@@ -138,8 +140,8 @@ export CKPT_ROOT=$PWD/checkpoints              # see "Checkpoints"
 
 Run the unit tests (CPU) with `pip install pytest && pytest tests`.
 
-We tested our code on NVIDIA A100 GPUs with Linux, Python 3.10, PyTorch 2.4.1,
-torchvision 0.19.1 and gsplat 1.4.0 (pinned versions in
+We tested our code on NVIDIA A100 GPUs with Linux, Python 3.10, PyTorch 2.13.0,
+torchvision 0.28.0 and gsplat 1.4.0 (pinned versions in
 [`requirements.txt`](requirements.txt)). Evaluation and rendering in the demo
 need a CUDA GPU.
 

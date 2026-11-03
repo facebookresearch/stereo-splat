@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      # torchvision pins an exact torch version, so they must move in one PR,
+      # for both version updates and security updates.
+      torch:
+        applies-to: version-updates
+        patterns:
+          - "torch"
+          - "torchvision"
+      torch-security:
+        applies-to: security-updates
+        patterns:
+          - "torch"
+          - "torchvision"
