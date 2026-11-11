@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Security updates only: the pinned versions in requirements.txt are the ones
+    # the published results were validated with, so routine version bumps are off.
+    # A limit of 0 disables version-update PRs; security-update PRs still open.
+    open-pull-requests-limit: 0
+    groups:
+      # torchvision pins an exact torch version, so they must move in one PR.
+      torch-security:
+        applies-to: security-updates
+        patterns:
+          - "torch"
+          - "torchvision"

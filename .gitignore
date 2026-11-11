@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv*/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Data, checkpoints, outputs: never commit these.
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.npy
+*.npz
+*.ply
+outputs/
+output/
+runs/
+checkpoints/
+# FoundationStereo is installed by the user, never committed (third_party/README.md).
+/third_party/FoundationStereo/
+/data/*
+!/data/splits/

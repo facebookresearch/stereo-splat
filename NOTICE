@@ -1,0 +1,24 @@
+StereoSplat
+Copyright (c) Meta Platforms, Inc. and affiliates.
+
+This repository contains code adapted from the following projects. Their
+licenses apply to the corresponding files (see third_party/README.md).
+
+Depth Anything 3 (https://github.com/ByteDance-Seed/Depth-Anything-3)
+  Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
+  Licensed under the Apache License, Version 2.0
+  (full text: third_party/licenses/Apache-2.0.txt)
+  Modified files: stereosplat/models/gaussian_adapter.py,
+  stereosplat/rendering/renderer.py, stereosplat/rendering/gaussians.py,
+  stereosplat/utils/geometry.py, stereosplat/utils/sh.py
+
+PyTorch3D (https://github.com/facebookresearch/pytorch3d)
+  Copyright (c) Meta Platforms, Inc. and affiliates
+  Licensed under the BSD 3-Clause License
+  (full text: third_party/licenses/PyTorch3D-BSD-3-Clause.txt)
+  Quaternion helpers in stereosplat/utils/geometry.py
+
+FoundationStereo (https://github.com/NVlabs/FoundationStereo) is used as an
+external dependency that users install themselves (see third_party/README.md),
+under the NVIDIA Source Code License. It is not distributed with this
+repository.

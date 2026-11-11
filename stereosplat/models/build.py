@@ -1,0 +1,298 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+"""Model construction and checkpoint loading.
+
+Checkpoint formats accepted by :func:`load_checkpoint`:
+
+* Training checkpoints written by ``scripts/train.py``:
+  ``{"model_state_dict": ..., "optimizer_state_dict": ..., "epoch": ...}``.
+  ``scripts/train.py`` stores only the StereoSplat weights (see
+  :func:`trainable_state_dict`); older full checkpoints that also contain the
+  frozen backbone under ``fs_model.*`` are accepted too.
+* Release checkpoints (``version`` key): ``{"version": 1, "config": {...},
+  "state_dict": ...}`` holding only the StereoSplat weights (no ``fs_model.*``
+  tensors). The frozen FoundationStereo backbone is not redistributed; all its
+  tensors come from NVIDIA's FoundationStereo checkpoint loaded by
+  :func:`build_model`. Stored either as a ``.pth`` file (torch pickle) or as
+  a ``.safetensors`` file whose metadata holds ``version`` and the JSON-encoded
+  ``config`` (see :func:`save_release_checkpoint`).
+
+Key remap: the public module names are identical to the ones used to train the
+paper model, so :func:`remap_state_dict` only strips a DistributedDataParallel
+``module.`` prefix. See ``KEY_REMAP`` (empty).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+from collections.abc import Mapping
+from typing import Any
+
+import torch
+import torch.distributed as dist
+from omegaconf import OmegaConf
+
+from stereosplat.backbones.foundation_stereo import build_foundation_stereo
+from stereosplat.models.gaussian_adapter import GaussianAdapter
+from stereosplat.models.stereosplat import StereoSplat
+
+logger: logging.Logger = logging.getLogger(__name__)
+
+MODEL_NAMES: frozenset[str] = frozenset({"stereosplat"})
+
+# State-dict prefix of the frozen FoundationStereo backbone.
+BACKBONE_PREFIX: str = "fs_model."
+
+# Old prefix -> new prefix. Empty: module names are unchanged.
+KEY_REMAP: dict[str, str] = {}
+
+# Settings of the released model; other values are not supported by this code.
+_FIXED_SETTINGS: dict[str, Any] = {
+    "cross_view_mode": "attention_multiscale",
+    "use_learned_weights": True,
+    "use_residual_gating": False,
+}
+
+
+def _check_config(model_config: Mapping[str, Any]) -> None:
+    name = model_config.get("name", "stereosplat")
+    if name not in MODEL_NAMES:
+        raise ValueError(
+            f"Unknown model name {name!r}; expected one of {sorted(MODEL_NAMES)}."
+        )
+    for key, expected in _FIXED_SETTINGS.items():
+        if key in model_config and model_config[key] != expected:
+            raise ValueError(
+                f"model.{key}={model_config[key]!r} is not supported; the released "
+                f"StereoSplat model uses {key}={expected!r}."
+            )
+
+
+def freeze_model(model: torch.nn.Module) -> torch.nn.Module:
+    """Return ``model`` in eval mode with gradients disabled for its parameters."""
+    return model.requires_grad_(False).eval()
+
+
+def build_foundation_stereo_backbone(
+    fs_checkpoint_path: str,
+    load_weights: bool = True,
+    fs_root: str | None = None,
+) -> torch.nn.Module:
+    """Build the frozen FoundationStereo backbone.
+
+    Args:
+        fs_checkpoint_path: Directory with the FoundationStereo ``cfg.yaml`` and
+            ``model_best_bp2.pth`` (the public ViT-S "11-33-40" release).
+        load_weights: Load ``model_best_bp2.pth`` (disable only for tests).
+        fs_root: FoundationStereo source checkout (see
+            ``stereosplat.backbones.foundation_stereo``).
+    """
+    fs_config = OmegaConf.load(os.path.join(fs_checkpoint_path, "cfg.yaml"))
+
+    # Construct on rank 0 first so torch.hub code downloads happen only once.
+    if dist.is_available() and dist.is_initialized():
+        if dist.get_rank() == 0:
+            backbone = build_foundation_stereo(fs_config, root=fs_root)
+        dist.barrier()
+        if dist.get_rank() != 0:
+            backbone = build_foundation_stereo(fs_config, root=fs_root)
+    else:
+        backbone = build_foundation_stereo(fs_config, root=fs_root)
+
+    if load_weights:
+        ckpt_path = os.path.join(fs_checkpoint_path, "model_best_bp2.pth")
+        # The NVIDIA checkpoint pickles OmegaConf / numpy objects, which the
+        # weights_only unpickler rejects; only load it from the official source.
+        ckpt = torch.load(ckpt_path, weights_only=False, map_location="cpu")
+        backbone.load_state_dict(ckpt["model"])
+
+    backbone.eval()
+    freeze_model(backbone)
+    return backbone
+
+
+def build_model(
+    model_config: Mapping[str, Any],
+    backbone: torch.nn.Module | None = None,
+    load_backbone_weights: bool = True,
+) -> StereoSplat:
+    """Build StereoSplat from the ``model`` section of a config.
+
+    Args:
+        model_config: Model config (see ``configs/eval_tartanv2.yaml``).
+        backbone: Optional pre-built backbone (used by tests).
+        load_backbone_weights: Load the FoundationStereo weights.
+    """
+    _check_config(model_config)
+    if backbone is None:
+        backbone = build_foundation_stereo_backbone(
+            model_config["fs_checkpoint_path"],
+            load_weights=load_backbone_weights,
+            fs_root=model_config.get("fs_root", None),
+        )
+
+    gaussian_adapter = GaussianAdapter(
+        sh_degree=model_config["sh_degree"],
+        gaussian_scale_min=model_config["gaussian_scale_min"],
+        gaussian_scale_max=model_config["gaussian_scale_max"],
+    )
+
+    return StereoSplat(
+        backbone,
+        gaussian_adapter,
+        max_depth=model_config["max_depth"],
+        merge_distance=model_config.get("merge_distance", 0.003),
+        appearance_resolution=model_config.get("appearance_resolution", 0.2),
+        weight_temperature_init=model_config.get("weight_temperature_init", 1.0),
+        raw_gaussian_channels=model_config.get("raw_gaussian_channels", 32),
+        cross_view_num_heads=model_config.get("cross_view_num_heads", 4),
+        cross_view_num_layers=model_config.get("cross_view_num_layers", 4),
+        cross_view_ffn_ratio=model_config.get("cross_view_ffn_ratio", 4),
+    )
+
+
+def remap_state_dict(state_dict: Mapping[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Map checkpoint keys onto the current module names."""
+    out: dict[str, torch.Tensor] = {}
+    for key, value in state_dict.items():
+        if key.startswith("module."):
+            key = key[len("module.") :]
+        for old, new in KEY_REMAP.items():
+            if key.startswith(old):
+                key = new + key[len(old) :]
+                break
+        out[key] = value
+    return out
+
+
+def trainable_state_dict(model: torch.nn.Module) -> dict[str, torch.Tensor]:
+    """StereoSplat state dict without the frozen backbone (``fs_model.*``)."""
+    return {
+        k: v for k, v in model.state_dict().items() if not k.startswith(BACKBONE_PREFIX)
+    }
+
+
+def load_trainable_state_dict(
+    model: torch.nn.Module,
+    state_dict: Mapping[str, torch.Tensor],
+    source: str = "state dict",
+) -> None:
+    """Load StereoSplat weights; the backbone keys may be absent.
+
+    Every non-backbone key of ``model`` must be present and no unknown keys are
+    allowed. Backbone tensors, if present (older full training checkpoints),
+    are loaded as well.
+    """
+    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    bad_missing = [k for k in missing if not k.startswith(BACKBONE_PREFIX)]
+    if bad_missing or unexpected:
+        raise RuntimeError(
+            f"{source} does not match StereoSplat: "
+            f"missing={bad_missing[:10]} unexpected={list(unexpected)[:10]}"
+        )
+
+
+def save_release_checkpoint(
+    path: str | os.PathLike[str],
+    state_dict: Mapping[str, torch.Tensor],
+    config: Mapping[str, Any],
+    version: int = 1,
+) -> None:
+    """Write a release checkpoint (``.safetensors`` or torch ``.pth``).
+
+    Release checkpoints hold only the StereoSplat weights; FoundationStereo
+    (``fs_model.*``) tensors are rejected because they are loaded from NVIDIA's
+    checkpoint instead of being redistributed.
+    """
+    backbone_keys = [k for k in state_dict if k.startswith(BACKBONE_PREFIX)]
+    if backbone_keys:
+        raise ValueError(
+            f"Release checkpoints must not contain FoundationStereo tensors; got "
+            f"{len(backbone_keys)} '{BACKBONE_PREFIX}*' keys, e.g. {backbone_keys[:3]}"
+        )
+    state = {k: v.detach().cpu().contiguous() for k, v in state_dict.items()}
+    if str(path).endswith(".safetensors"):
+        from safetensors.torch import save_file
+
+        metadata = {
+            "format": "pt",
+            "version": str(version),
+            "config": json.dumps(dict(config), sort_keys=True),
+        }
+        save_file(state, str(path), metadata=metadata)
+    else:
+        torch.save(
+            {"version": version, "config": dict(config), "state_dict": state}, path
+        )
+
+
+def read_checkpoint(
+    checkpoint_path: str | os.PathLike[str],
+    map_location: str | torch.device = "cpu",
+) -> dict[str, Any]:
+    """Read a checkpoint file without building a model.
+
+    ``.safetensors`` release files are returned in the same layout as ``.pth``
+    release checkpoints (``version``, ``config``, ``state_dict``). Pickled
+    checkpoints are read with the restricted unpickler (``weights_only=True``);
+    release and training checkpoints hold only tensors and plain containers.
+    """
+    if str(checkpoint_path).endswith(".safetensors"):
+        from safetensors import safe_open
+
+        device = str(map_location) if map_location is not None else "cpu"
+        with safe_open(str(checkpoint_path), framework="pt", device=device) as f:
+            metadata = f.metadata() or {}
+            state = {k: f.get_tensor(k) for k in f.keys()}
+        if "version" not in metadata or "config" not in metadata:
+            raise RuntimeError(
+                f"{checkpoint_path} is not a StereoSplat release checkpoint "
+                "(missing 'version'/'config' metadata)"
+            )
+        return {
+            "version": int(metadata["version"]),
+            "config": json.loads(metadata["config"]),
+            "state_dict": state,
+        }
+    return torch.load(checkpoint_path, map_location=map_location, weights_only=True)
+
+
+def load_checkpoint(
+    model: StereoSplat,
+    checkpoint_path: str,
+    map_location: str | torch.device = "cpu",
+) -> dict[str, Any]:
+    """Load StereoSplat weights; returns the checkpoint metadata.
+
+    Both formats must cover every non-backbone key. Release checkpoints must
+    not contain ``fs_model.*`` tensors (the backbone weights come from the
+    FoundationStereo checkpoint); training checkpoints may.
+    """
+    ckpt = read_checkpoint(checkpoint_path, map_location=map_location)
+    if "version" in ckpt:
+        state = remap_state_dict(ckpt["state_dict"])
+        backbone_keys = [k for k in state if k.startswith(BACKBONE_PREFIX)]
+        if backbone_keys:
+            raise RuntimeError(
+                f"Release checkpoint {checkpoint_path} contains FoundationStereo "
+                f"tensors ({backbone_keys[:3]}); release checkpoints hold only the "
+                "StereoSplat weights."
+            )
+    else:
+        state = remap_state_dict(ckpt["model_state_dict"])
+    load_trainable_state_dict(model, state, source=str(checkpoint_path))
+    logger.info(
+        f"Loaded checkpoint {checkpoint_path} (epoch {ckpt.get('epoch', '?')}, "
+        f"version {ckpt.get('version', '-')})"
+    )
+    return {
+        k: v
+        for k, v in ckpt.items()
+        if k not in ("state_dict", "model_state_dict", "optimizer_state_dict")
+    }

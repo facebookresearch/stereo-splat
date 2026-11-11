@@ -1,0 +1,32 @@
+# StereoSplat evaluation on KITTI (zero-shot) (NVS, 3-pair windows, stride 1).
+#
+# The test dataset key ("kitti") is also the sub-directory name used to look up
+# external poses: <poses_dir>/kitti/<sequence>/<pose_type>.npy
+seed: 0
+max_depth: 80.0
+num_views: 3
+# Fail when a scene listed in a split file is missing under DATA_ROOT. Set to
+# true (globally or per dataset) only to run on a deliberately partial copy.
+allow_missing_scenes: false
+
+model:
+  name: stereosplat
+  fs_checkpoint_path: ${oc.env:CKPT_ROOT}/foundation_stereo/11-33-40
+  sh_degree: 0
+  gaussian_scale_min: 1.0e-05
+  gaussian_scale_max: 80.0
+  merge_distance: 0.003
+  appearance_resolution: 0.2
+  weight_temperature_init: 1.0
+  cross_view_num_layers: 4
+
+test_datasets:
+  kitti:
+    dataset_path: ${oc.env:DATA_ROOT}/kitti_static
+    split_file_path: data/splits/kitti_static/test.txt
+    img_size: [320, 640]
+    stride: 1
+    num_samples: -1
+
+optimization:
+  batch_size: 1

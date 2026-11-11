@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stereosplat"
+version = "1.0.0"
+description = "StereoSplat: metric-scale novel view synthesis via stereo-grounded Gaussian splatting"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "Meta Platforms, Inc. and affiliates" }]
+dependencies = [
+    # >= 2.6: torch.load(weights_only=True) is used for release .pth files
+    # (CVE-2025-32434); requirements.txt pins the tested versions.
+    "torch>=2.6",
+    "torchvision>=0.21",
+    "numpy<2",
+    "einops",
+    "e3nn",
+    "gsplat",
+    "timm",
+    "omegaconf",
+    "opencv-python-headless",
+    "pillow",
+    "matplotlib",
+    "lpips",
+    "pytorch-msssim",
+    "torchmetrics",
+    "tensorboard",
+    "tqdm",
+    "plyfile",
+    "safetensors",
+    "scipy>=1.14",
+    "huggingface_hub",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools]
+# data/splits is installed as stereosplat/splits so that split files resolve
+# from a regular (non-editable) install; see stereosplat.datasets.factory.
+packages = [
+    "stereosplat",
+    "stereosplat.backbones",
+    "stereosplat.datasets",
+    "stereosplat.evaluation",
+    "stereosplat.losses",
+    "stereosplat.models",
+    "stereosplat.rendering",
+    "stereosplat.utils",
+    "stereosplat.splits",
+]
+
+[tool.setuptools.package-dir]
+"stereosplat.splits" = "data/splits"
+
+[tool.setuptools.package-data]
+"stereosplat.splits" = ["*/*.txt"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+extend-exclude = ["third_party"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # line length is handled by the formatter
+    "E731",
+    "B905",  # zip(strict=...) not required
+    "B008",  # torch.device defaults
+    "UP007",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["stereosplat"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

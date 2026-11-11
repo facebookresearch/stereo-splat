@@ -1,0 +1,105 @@
+# StereoSplat training recipe (paper model).
+#
+# Model, loss, optimizer, schedule and training data of the released model:
+# TartanAir (v1), Infinigen (InfinigenSV) and XRStereo. To train on a subset,
+# disable a dataset with a null override, e.g. training_datasets.xrstereo=null.
+#
+# Paths are read from the environment:
+#   DATA_ROOT  processed datasets (see scripts/prepare_data); XRStereo is the
+#              extracted release under DATA_ROOT/xrstereo (sequences/ inside)
+#   CKPT_ROOT  FoundationStereo weights (CKPT_ROOT/foundation_stereo/11-33-40/
+#              with cfg.yaml + model_best_bp2.pth)
+seed: 0
+max_depth: 80.0
+num_views: 3
+# Fail when a scene listed in a split file is missing under DATA_ROOT. Set to
+# true (globally or per dataset) only to run on a deliberately partial copy.
+allow_missing_scenes: false
+
+logging:
+  output_dir: outputs/stereosplat
+
+model:
+  name: stereosplat
+  fs_checkpoint_path: ${oc.env:CKPT_ROOT}/foundation_stereo/11-33-40
+  sh_degree: 0
+  gaussian_scale_min: 1.0e-05
+  gaussian_scale_max: 80.0
+  merge_distance: 0.003
+  appearance_resolution: 0.2
+  weight_temperature_init: 1.0
+  cross_view_num_layers: 4
+
+training_datasets:
+  tartan:
+    dataset_path: ${oc.env:DATA_ROOT}/tartanair_processed
+    split_file_path: data/splits/tartan/train.txt
+    img_size: [320, 640]
+    stride: 5
+    num_samples: -1
+  infinigen:
+    dataset_path: ${oc.env:DATA_ROOT}/infinigen_processed
+    split_file_path: data/splits/infinigen_static/train.txt
+    img_size: [320, 640]
+    stride: 1
+    num_samples: -1
+  # 5 frames per sequence -> one window (frames 0-2) per sequence.
+  xrstereo:
+    dataset_path: ${oc.env:DATA_ROOT}/xrstereo/sequences
+    split_file_path: data/splits/xrstereo/train.txt
+    img_size: [320, 640]
+    stride: 1
+    num_samples: -1
+
+# Evaluated once after training. Disable a dataset with an override such as
+# test_datasets.kitti=null (or all of them with test_datasets=null).
+test_datasets:
+  infinigen:
+    dataset_path: ${oc.env:DATA_ROOT}/infinigen_processed
+    split_file_path: data/splits/infinigen_static/test.txt
+    img_size: [320, 640]
+    stride: 1
+    num_samples: -1
+  kitti:
+    dataset_path: ${oc.env:DATA_ROOT}/kitti_static
+    split_file_path: data/splits/kitti_static/test.txt
+    img_size: [320, 640]
+    stride: 1
+    num_samples: -1
+  tartanv2:
+    dataset_path: ${oc.env:DATA_ROOT}/tartanair_v2_processed
+    split_file_path: data/splits/tartanv2/test.txt
+    img_size: [320, 640]
+    stride: 1
+    num_samples: -1
+
+loss:
+  name: l1
+  color_l1_weight: 0.8
+  color_ssim_weight: 0.2
+  color_lpips_weight: 0.05
+  depth_weight: 0.5
+
+# Resume an interrupted run from a training checkpoint (or pass --resume).
+resume_from: null
+
+# The paper model was trained on 40 GPUs (5 nodes x 8) with batch size 1 per
+# GPU (effective batch size 40); the LR schedule is per epoch. With fewer GPUs,
+# either keep the effective batch size with grad_accum_steps (e.g. 8 GPUs x 5
+# steps) or scale lr / min_lr linearly with the effective batch size (see
+# README).
+optimization:
+  batch_size: 1
+  grad_accum_steps: 1
+  epochs: 10
+  lr: 0.001
+  min_lr: 1.0e-05
+  warmup_epochs: 1
+  validate_every: 1
+  # Average validation metrics over all ranks (selects best_checkpoint.pt).
+  # The paper runs used rank 0's validation shard only (false).
+  val_reduce_across_ranks: true
+  log_every_n_steps: 100
+  # TensorBoard comparison image interval (default: log_every_n_steps).
+  vis_every_n_steps: null
+  grad_clip: 0.0
