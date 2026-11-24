@@ -15,7 +15,9 @@ einops==0.8.2
 omegaconf==2.2.3
 torchmetrics==1.2.1
 opencv-python-headless==4.10.0.84
-pillow>=10.0
+# >= 10.3.0: bundled libwebp fix (CVE-2023-4863) plus CVE-2023-50447 and
+# CVE-2024-28219.
+pillow>=10.3.0
 matplotlib==3.9.2
 tensorboard==2.18.0
 tqdm>=4.66

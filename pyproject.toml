@@ -22,7 +22,8 @@ dependencies = [
     "timm",
     "omegaconf",
     "opencv-python-headless",
-    "pillow",
+    # >= 10.3.0: CVE-2023-4863 (bundled libwebp), CVE-2023-50447, CVE-2024-28219.
+    "pillow>=10.3.0",
     "matplotlib",
     "lpips",
     "pytorch-msssim",
